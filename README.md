@@ -20,3 +20,6 @@ Current data sizes:
 - Official labelled training tweets: 44389  
 - Overall 129887 tokens (25166072 tokens including singletons)
 
+Results:
+
+Official results for Task A and Task B are available here: https://docs.google.com/spreadsheets/d/11k0XKaYwJ-Xh-C9sm5M_a6kfQJCsK0PlPTLJs1dDZrU/edit#gid=0
