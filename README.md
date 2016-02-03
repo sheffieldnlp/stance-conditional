@@ -22,11 +22,11 @@ Current data sizes:
 
 Results:
 
-Official results for Task A and Task B are available here: https://docs.google.com/spreadsheets/d/11k0XKaYwJ-Xh-C9sm5M_a6kfQJCsK0PlPTLJs1dDZrU/edit#gid=0
-
+- Official results for Task A and Task B are available here: https://docs.google.com/spreadsheets/d/11k0XKaYwJ-Xh-C9sm5M_a6kfQJCsK0PlPTLJs1dDZrU/edit#gid=0
+- A visualisation of the official train and test datasets by the task organisers is available here: http://www.saifmohammad.com/WebPages/StanceDataset.htm
 
 Dependencies:
 
-- Tensorflow: install from sources (https://github.com/tensorflow/tensorflow/blob/master/tensorflow/g3doc/get_started/os_setup.md)
-   -   Either for Python 2.7 or Python 3.3+
-   -   The version for Python 3 is currently still a bit buggy, the following might need fixing during installation: https://github.com/tensorflow/tensorflow/issues/961
+- Python 3.5
+- Numpy
+- Tensorflow 0.6 (https://www.tensorflow.org/versions/master/get_started/os_setup.html#pip-installation)
