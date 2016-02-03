@@ -1,3 +1,6 @@
 [submodule "twokenize"]
 	path = twokenize
 	url = https://github.com/leondz/twokenize
+[submodule "tfrnn"]
+	path = tfrnn
+	url = https://github.com/uclmr/tfrnn
