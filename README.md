@@ -23,3 +23,10 @@ Current data sizes:
 Results:
 
 Official results for Task A and Task B are available here: https://docs.google.com/spreadsheets/d/11k0XKaYwJ-Xh-C9sm5M_a6kfQJCsK0PlPTLJs1dDZrU/edit#gid=0
+
+
+Dependencies:
+
+- Tensorflow: install from sources (https://github.com/tensorflow/tensorflow/blob/master/tensorflow/g3doc/get_started/os_setup.md)
+   -   Either for Python 2.7 or Python 3.3+
+   -   The version for Python 3 is currently still a bit buggy, the following might need fixing during installation: https://github.com/tensorflow/tensorflow/issues/961
