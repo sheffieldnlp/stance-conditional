@@ -104,7 +104,7 @@ def test_trainer(tweets, targets, labels, dictionary):
     target_size = 3
     max_seq_length = len(tweets[0])
     vocab_size = dictionary.__sizeof__()
-    data = [tweets, targets, labels]
+    data = [np.asarray(tweets), np.asarray(targets), labels]
 
 
     # output of get_model(): model, [inputs, inputs_cond]
@@ -132,6 +132,7 @@ def test_trainer(tweets, targets, labels, dictionary):
     trainer = Trainer(optimizer, max_epochs, hooks)
 
     trainer(batcher, placeholders=placeholders, loss=loss, model=model)
+
 
 
 if __name__ == '__main__':
