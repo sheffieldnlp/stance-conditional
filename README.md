@@ -6,6 +6,7 @@ Official stance data is available via https://www.dropbox.com/sh/o8789zsmpvy7bu3
 
 - semeval2016-task6-trainingdata.txt is the official training set for Task A (seen target)
 - semeval2016-task6-trialdata.txt is the official trial data for Task A (seen target)
+- semeval2016-task6-train+dev.txt is the official training data concatenated with the official trial data for Task A (seen target)
 - semEval2016-Task6-subtaskA-testdata-gold.txt is the official test data for Task A (seen target)
 - downloaded_Donald_Trump.txt is the official development data for Task B (unseen target)
 - semEval2016-Task6-subtaskB-testdata.txt is the official test data for Task B (unseen target)
@@ -30,3 +31,12 @@ Dependencies:
 - Python 3.5
 - Numpy
 - Tensorflow 0.6 (https://www.tensorflow.org/versions/master/get_started/os_setup.html#pip-installation)
+
+Running instructions:
+
+- Download all the above mentioned files and save them in the data/ subfolder
+- If not already there, add ssh key to github account (https://help.github.com/articles/adding-a-new-ssh-key-to-your-github-account/)
+- Fetch tfrnn submodule code:
+```shell
+git submodule update --init --recursive
+```
