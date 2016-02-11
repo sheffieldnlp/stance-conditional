@@ -1,23 +1,15 @@
-__author__ = 'Isabelle Augenstein'
-
 import tensorflow as tf
 import numpy as np
 
 from naga.shared.trainer import Trainer
-from tfrnn.rnn import Encoder
-from tfrnn.rnn import Projector
-from tfrnn.rnn import rnn_cell
-from tfrnn.hooks import SaveModelHook
-from tfrnn.hooks import AccuracyHook
-from tfrnn.hooks import LossHook
-from tfrnn.hooks import SpeedHook
+from tfrnn.rnn import Encoder, Projector, rnn_cell
+from tfrnn.hooks import SaveModelHook, AccuracyHook, LossHook, SpeedHook
 from tfrnn.batcher import BatchBucketSampler
-from tfrnn.util import sample_one_hot
-from tfrnn.util import debug_node
+from tfrnn.util import sample_one_hot, debug_node, load_model
 from tfrnn.hooks import LoadModelHook
-
 from readwrite import reader
 from preprocess import tokenise_tweets, build_dataset, transform_tweet, transform_labels
+
 
 def get_model(batch_size, max_seq_length, input_size, hidden_size, target_size,
               vocab_size):
@@ -72,10 +64,10 @@ def get_model(batch_size, max_seq_length, input_size, hidden_size, target_size,
     return model, [inputs, inputs_cond]
 
 
-def test_trainer(tweets, targets, labels, dictionary):
+def test_trainer(dictionary, tweets, targets, labels, tweets_test, targets_test, labels_test):
     # parameters
     num_samples = 2113
-    max_epochs = 100
+    max_epochs = 6  # 100
     learning_rate = 0.01
     batch_size = 129  # number training examples per training epoch
     input_size = 91
@@ -92,13 +84,6 @@ def test_trainer(tweets, targets, labels, dictionary):
     #    np.asarray([sample_one_hot(target_size) for i in range(0, num_samples)])   # one hot vector for labels
     #]
 
-    # real data example from Tim below
-        # directory = "../data/rte_engineering/"
-        # data, vocab = load_engineering_rte_data(directory)
-        # print(data[0])
-        # vocab_size = vocab.size()
-        # target_size = len(data[0][2])
-        # max_seq_length = max(len(data[0][0]), len(data[0][1]))
 
     # real data stance-semeval
     target_size = 3
@@ -122,16 +107,41 @@ def test_trainer(tweets, targets, labels, dictionary):
     placeholders += [targets]
 
     hooks = [
-        SpeedHook(50, batch_size),
-        SaveModelHook("./out/save", 100),
-        #LoadModelHook("./out/save", 10),
+        SpeedHook(iteration_interval=50, batch_size=batch_size),
+        SaveModelHook(path="../out/save", at_epoch=5),
+        #LoadModelHook("./out/save/", 10),
         AccuracyHook(acc_batcher, placeholders, 5),
-        LossHook(10)
+        LossHook(iteration_interval=10)
     ]
 
     trainer = Trainer(optimizer, max_epochs, hooks)
-
     trainer(batcher, placeholders=placeholders, loss=loss, model=model)
+
+
+    print("Applying to test data, getting predictions for NONE/AGAINST/FAVOR")
+    path = "../out/save/latest"
+
+    data_test = [np.asarray(tweets_test), np.asarray(targets_test), labels_test]
+    corpus_test_batch = BatchBucketSampler(data_test, batch_size)
+
+    with tf.Session() as sess:
+
+        load_model(sess, path)
+
+        total = 0
+        correct = 0
+        for values in corpus_test_batch:
+            total += len(values[-1])
+            feed_dict = {}
+            for i in range(0, len(placeholders)):
+                feed_dict[placeholders[i]] = values[i]
+            truth = np.argmax(values[-1], 1)  # values[2] is a 3-legth one-hot vector containing the labels. this is to transform those back into integers
+            predicted = sess.run(tf.arg_max(tf.nn.softmax(model), 1),
+                                     feed_dict=feed_dict)
+            correct += sum(truth == predicted)
+            print("Num testing samples " + str(total) +
+                  "\tAcc " + str(float(correct)/total) +
+                  "\tCorrect " + str(correct) + "\tTotal " + str(total))
 
 
 
@@ -145,4 +155,12 @@ if __name__ == '__main__':
     transformed_targets = [transform_tweet(dictionary, senttoks) for senttoks in target_tokens]
     transformed_labels = transform_labels(labels)
 
-    test_trainer(transformed_tweets, transformed_targets, transformed_labels, dictionary)
+    tweets_test, targets_test, labels_test = reader.readTweetsOfficial("../data/SemEval2016-Task6-subtaskB-testdata-gold.txt")
+    tweet_tokens_test = tokenise_tweets(tweets_test)
+    target_tokens_test = tokenise_tweets(targets_test)
+    transformed_tweets_test = [transform_tweet(dictionary, senttoks) for senttoks in tweet_tokens_test]
+    transformed_targets_test = [transform_tweet(dictionary, senttoks) for senttoks in target_tokens_test]
+    transformed_labels_test = transform_labels(labels_test)
+
+    test_trainer(dictionary, transformed_tweets, transformed_targets, transformed_labels, transformed_tweets_test,
+                 transformed_targets_test, transformed_labels_test)
