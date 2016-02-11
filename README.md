@@ -36,7 +36,12 @@ Running instructions:
 
 - Download all the above mentioned files and save them in the data/ subfolder
 - If not already there, add ssh key to github account (https://help.github.com/articles/adding-a-new-ssh-key-to-your-github-account/)
-- Fetch tfrnn submodule code:
+- Fetch tfrnn and naga submodule code:
 ```shell
 git submodule update --init --recursive
+```
+- Make sure tfrnn-repo/naga-repo, twokenize, readwrite, and stancedetection are on PYTHONPATH
+- To run stance detection training and test with conditional encoding:
+```shell
+python3 stancedetection/conditional.py
 ```
