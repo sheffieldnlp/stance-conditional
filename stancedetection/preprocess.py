@@ -89,7 +89,7 @@ def transform_labels(labels, dim=3):
             ix = 2
         v[ix] = 1
         labels_t.append(v)
-    return np.asarray(labels_t)
+    return labels_t
 
 
 if __name__ == '__main__':

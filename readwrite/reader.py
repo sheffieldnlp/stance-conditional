@@ -2,7 +2,7 @@ __author__ = 'Isabelle Augenstein'
 
 import io
 import json
-
+import numpy as np
 
 def readTweetsOfficial(tweetfile, encoding='windows-1252', tweetcolumn=2, topic="all"):
     """
@@ -15,12 +15,17 @@ def readTweetsOfficial(tweetfile, encoding='windows-1252', tweetcolumn=2, topic=
     tweets = []
     targets = []
     labels = []
+    ids = []
     for line in io.open(tweetfile, encoding=encoding, mode='r'):
         if line.startswith('ID\t'):
             continue
         if topic == "all":
             tweets.append(line.split("\t")[tweetcolumn])
             targets.append(line.split("\t")[tweetcolumn-1])
+            lid = line.split("\t")[0]
+            v = np.zeros(1)
+            v[0] = lid
+            ids.append(v)
             if tweetcolumn > 1:
                 labels.append(line.split("\t")[tweetcolumn+1].strip("\n"))
             else:
@@ -28,12 +33,16 @@ def readTweetsOfficial(tweetfile, encoding='windows-1252', tweetcolumn=2, topic=
         elif topic in line.split("\t")[tweetcolumn-1].lower():
             tweets.append(line.split("\t")[tweetcolumn])
             targets.append(line.split("\t")[tweetcolumn-1])
+            lid = line.split("\t")[0]
+            v = np.zeros(1)
+            v[0] = lid
+            ids.append(v)
             if tweetcolumn > 1:
                 labels.append(line.split("\t")[tweetcolumn+1].strip("\n"))
             else:
                 labels.append("UNKNOWN")
 
-    return tweets,targets,labels
+    return tweets,targets,labels,ids
 
 
 
