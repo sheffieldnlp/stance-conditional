@@ -229,6 +229,8 @@ def get_model_tweetonly(batch_size, max_seq_length, input_size, hidden_size, tar
 
 
 def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, targetInTweet={}, testid = "tweetonly-1", pretrain = "pre_cont"):
+    # TO DO: add l2 regularisation and dropout
+
     # parameters
     num_samples = 5628
     max_epochs = 21  # 100
@@ -264,7 +266,7 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
         model, placeholders = get_model_conditional(batch_size, max_seq_length, input_size,
                                                     hidden_size, target_size, vocab_size, pretrain)
 
-    ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")
+    ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
     loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)   # targets: labels (e.g. pos/neg/neutral)
 
