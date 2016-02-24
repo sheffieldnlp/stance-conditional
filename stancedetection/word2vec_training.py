@@ -27,7 +27,7 @@ def trainWord2VecModel(tweets, modelname):
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
     # set params
-    num_features = 91    # Word vector dimensionality
+    num_features = 100#91    # Word vector dimensionality
     min_word_count = 5   # Minimum word count
     num_workers = 4       # Number of threads to run in parallel
     context = 5          # Context window size
@@ -47,7 +47,7 @@ def trainWord2VecModel(tweets, modelname):
 
 
 # find most similar n words to given word
-def applyWord2VecMostSimilar(modelname="../data/skip_nostop_multi_91features_10minwords_5context", word="#donaldtrump",
+def applyWord2VecMostSimilar(modelname="../data/skip_nostop_multi_100features_10minwords_5context", word="#donaldtrump",
                                  top=10):
     model = word2vec.Word2Vec.load(modelname)
     print("Find ", top, " terms most similar to ", word, "...")
@@ -74,6 +74,6 @@ if __name__ == '__main__':
     tweets_unlabelled = reader.readTweets("../data/additionalTweetsStanceDetection.json")
     tweet_tokens_unlabelled = tokenise_tweets(tweets_unlabelled)
 
-    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_single_91features_5minwords_5context")#("300features_40minwords_10context")
+    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_single_100features_5minwords_5context")#("300features_40minwords_10context")
 
-    applyWord2VecMostSimilar("../out/multi_skip_nostop_single_91features_5minwords_5context")
+    applyWord2VecMostSimilar("../out/skip_nostop_single_100features_5minwords_5context")

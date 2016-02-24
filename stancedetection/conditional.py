@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from tfrnn.rnn import Encoder, Projector, rnn_cell
-from tfrnn.hooks import SaveModelHook, SaveModelHookDev, AccuracyHook, LossHook, SpeedHook
+from tfrnn.hooks import SaveModelHook, AccuracyHook, LossHook, SpeedHook
 from tfrnn.batcher import BatchBucketSampler
 from tfrnn.util import sample_one_hot, debug_node, load_model, load_model_dev
 from tfrnn.hooks import LoadModelHook
@@ -12,6 +12,7 @@ from preprocess import tokenise_tweets, transform_targets, transform_tweet, tran
 from gensim.models import word2vec, Phrases
 from sklearn.metrics import classification_report
 from tfrnn.hooks import Hook
+import os
 
 class SemEvalHook(Hook):
     """
@@ -40,6 +41,23 @@ class SemEvalHook(Hook):
                 truth_all.extend(truth)
                 pred_all.extend(predicted)
             print(classification_report(truth_all, pred_all, target_names=["NEUTRAL", "AGAINST", "FAVOR"], digits=4)) #, target_names=[0, 1, 2]))
+
+
+class SaveModelHookDev(Hook):
+    def __init__(self, path, at_every_epoch=5):
+        self.path = path
+        self.at_every_epoch = at_every_epoch
+        self.saver = tf.train.Saver(tf.trainable_variables())
+
+    def __call__(self, sess, epoch, iteration, model, loss):
+        if epoch%self.at_every_epoch == 0:
+            #print("Saving model...")
+            SaveModelHookDev.save_model_dev(self.saver, sess, self.path + "_ep" + str(epoch) + "/", "model.tf")
+
+    def save_model_dev(saver, sess, path, modelname):
+        if not os.path.exists(path):
+            os.makedirs(path)
+        saver.save(sess, os.path.join(path, modelname))
 
 
 class Trainer(object):
@@ -216,7 +234,7 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
     max_epochs = 21  # 100
     learning_rate = 0.01
     batch_size = 97#101 for with Clinton  # number training examples per training epoch
-    input_size = 91
+    input_size = 100 #91
     hidden_size = 60  # making this smaller to avoid overfitting, example is 83
     #pretrain = "pre_cont"  # nopre, pre, pre_cont  : nopre: embeddings are initialised randomly,
                            # pre: word2vec model is loaded, pre_cont: word2vec is loaded and further trained
@@ -366,7 +384,7 @@ def readInputAndEval(outfile, stopwords="all", postprocess=True, shortenTargets=
     # phrasemodel = Phrases.load("../out/phrase_all.model")
     target = "clinton"
 
-    w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_91features_5minwords_5context")  # without multi is the one without phrases processing
+    w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context")  # without multi is the one without phrases processing
 
     if testSetting == True:
         trainingdata = "../data/semeval2016-task6-train+dev.txt"
@@ -433,4 +451,4 @@ def readInputAndEval(outfile, stopwords="all", postprocess=True, shortenTargets=
 
 
 if __name__ == '__main__':
-    readInputAndEval("../out/results_subtaskB_most_postpr_tweetonly_test3.txt", stopwords="punctonly", postprocess=True, testSetting=True, useClinton=True)
+    readInputAndEval("../out/results_subtaskB_most_postpr_tweetonly_test4.txt", stopwords="punctonly", postprocess=True, testSetting=True, useClinton=True)
