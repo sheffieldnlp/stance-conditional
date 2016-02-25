@@ -71,9 +71,9 @@ if __name__ == '__main__':
     tweets_trump, targets_trump, labels_trump, ids_trump = reader.readTweetsOfficial("../data/downloaded_Donald_Trump.txt", "utf-8", 1)
     tweet_tokens_trump = tokenise_tweets(tweets_trump)
 
-    tweets_unlabelled = reader.readTweets("../data/additionalTweetsStanceDetection.json")
+    tweets_unlabelled = reader.readTweets("../data/additionalTweetsStanceDetectionBig.json")#("../data/additionalTweetsStanceDetection.json")
     tweet_tokens_unlabelled = tokenise_tweets(tweets_unlabelled)
 
-    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_single_100features_5minwords_5context")#("300features_40minwords_10context")
+    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_single_100features_5minwords_5context_big")#("300features_40minwords_10context")
 
-    applyWord2VecMostSimilar("../out/skip_nostop_single_100features_5minwords_5context")
+    applyWord2VecMostSimilar("../out/skip_nostop_single_100features_5minwords_5context_big")

@@ -10,7 +10,8 @@ Official stance data is available via https://www.dropbox.com/sh/o8789zsmpvy7bu3
 - semEval2016-Task6-subtaskA-testdata-gold.txt is the official test data for Task A (seen target)
 - downloaded_Donald_Trump.txt is the official development data for Task B (unseen target)
 - semEval2016-Task6-subtaskB-testdata.txt is the official test data for Task B (unseen target)
-- additionalTweetsStanceDetection.json contains additional crawled tweets containing, each mentioning at least one of the targets for Task A or Task B
+- additionalTweetsStanceDetection.json contains additional crawled tweets (November - January) containing, each mentioning at least one of the targets for Task A or Task B
+- NEW: additionalTweetsStanceDetectionBig.json contains a bit more additional crawled tweets (November - February) containing, each mentioning at least one of the targets for Task A or Task B
 
 Note that for the unseen target task, no labelled training data is available, only unlabelled development data. The Task A train + dev data can be used for training instead.
 

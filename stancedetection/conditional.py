@@ -150,7 +150,7 @@ def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, t
     # running a second LSTM conditioned on the last state of the first
     outputs_cond, states_cond = lstm_encoder(inputs_cond_list, states[-1],
                                              "LSTMcond")
-    model = Projector(target_size, non_linearity=tf.nn.softmax)(outputs_cond[-1]) #tf.nn.tanh
+    model = Projector(target_size, non_linearity=tf.nn.tanh)(outputs_cond[-1]) #tf.nn.softmax
 
     return model, [inputs, inputs_cond]
 
@@ -275,7 +275,7 @@ def get_model_conditional_bidirectional(batch_size, max_seq_length, input_size, 
 
 
 
-def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, targetInTweet={}, testid = "tweetonly-1", pretrain = "pre_cont"):
+def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, modeltype="conditional", targetInTweet={}, testid = "backtowhatworked-1", pretrain = "pre_cont"):
     # TO DO: add l2 regularisation and dropout
 
     # parameters
@@ -287,9 +287,9 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
     hidden_size = 60  # making this smaller to avoid overfitting, example is 83
     #pretrain = "pre_cont"  # nopre, pre, pre_cont  : nopre: embeddings are initialised randomly,
                            # pre: word2vec model is loaded, pre_cont: word2vec is loaded and further trained
-    aggregated = False
-    tweetonly = True
-    outfolder = "_".join(["input-" + str(input_size), "hidden-" + str(hidden_size), pretrain, testid])
+    #aggregated = False
+    #tweetonly = False
+    outfolder = "_".join([modeltype, "input-" + str(input_size), "hidden-" + str(hidden_size), pretrain, testid])
 
     # real data stance-semeval
     target_size = 3
@@ -301,21 +301,27 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
     X = w2vmodel.syn0
     vocab_size = len(w2vmodel.vocab)
 
-    if aggregated == True:
+    if modeltype == "aggregated":
         model, placeholders = get_model_aggr(batch_size, max_seq_length, input_size,
                                              hidden_size, target_size, vocab_size, pretrain)
-    elif tweetonly == True:
+    elif modeltype == "tweetonly":
         model, placeholders = get_model_tweetonly(batch_size, max_seq_length, input_size,
                                              hidden_size, target_size, vocab_size, pretrain)
         data = [np.asarray(tweets), np.asarray(ids), np.asarray(labels)]
-    else:
+    elif modeltype == "conditional":
         # output of get_model(): model, [inputs, inputs_cond]
         model, placeholders = get_model_conditional(batch_size, max_seq_length, input_size,
                                                     hidden_size, target_size, vocab_size, pretrain)
 
     ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
-    loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)   # targets: labels (e.g. pos/neg/neutral)
+
+    # changing class weight, doesn't help though
+    #class_weight = tf.constant([0.2, 0.4, 0.4])
+    #weighted_logits = tf.mul(model, class_weight)  # shape [batch_size, 3]
+    #loss = tf.nn.softmax_cross_entropy_with_logits(weighted_logits, targets)
+
+    loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)#model, targets)   # targets: labels (e.g. pos/neg/neutral)
 
     optimizer = tf.train.AdamOptimizer(learning_rate)
 
@@ -334,7 +340,7 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
                  np.lib.pad(np.asarray(ids_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                  np.lib.pad(np.asarray(labels_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0))
                  ]
-    if tweetonly == True:
+    if modeltype == "tweetonly":
         data_test = [np.lib.pad(np.asarray(tweets_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                  np.lib.pad(np.asarray(ids_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                  np.lib.pad(np.asarray(labels_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0))
@@ -363,7 +369,7 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
     ids_all = []
 
     with tf.Session() as sess:
-        load_model_dev(sess, "../out/save/" + outfolder + "_ep20", "model.tf")
+        load_model_dev(sess, "../out/save/" + outfolder + "_ep" + str(max_epochs-1), "model.tf")
 
         total = 0
         correct = 0
@@ -419,7 +425,7 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
 
 
 
-def readInputAndEval(outfile, stopwords="all", postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, testSetting=True):
+def readInputAndEval(outfile, stopwords="all", testid="test1", modeltype="conditional", postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, testSetting=True):
     """
     Reading input files, calling the trainer for training the model, evaluate with official script
     :param outfile: name for output file
@@ -500,4 +506,4 @@ def readInputAndEval(outfile, stopwords="all", postprocess=True, shortenTargets=
 
 
 if __name__ == '__main__':
-    readInputAndEval("../out/results_subtaskB_most_postpr_tweetonly_test4.txt", stopwords="punctonly", postprocess=True, testSetting=True, useClinton=True)
+    readInputAndEval("../out/results_subtaskB_puctonly_postpr_moststops_test1.txt", testid="testB", modeltype="conditional", stopwords="most", postprocess=True, testSetting=True, useClinton=True)
