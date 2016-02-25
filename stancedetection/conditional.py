@@ -256,20 +256,32 @@ def get_model_conditional_bidirectional(batch_size, max_seq_length, input_size, 
     inputs_cond_list = [tf.squeeze(x) for x in
                     tf.split(1, max_seq_length, embedded_inputs_cond)]
 
-    lstm_encoder = Encoder(rnn_cell.BasicLSTMCell, input_size, hidden_size)
-    start_state = tf.zeros([batch_size, lstm_encoder.state_size])
+    #lstm_encoder = Encoder(rnn_cell.BasicLSTMCell, input_size, hidden_size)
+    #start_state = tf.zeros([batch_size, lstm_encoder.state_size])
 
     # [h_i], [h_i, c_i] <-- LSTM
     # [h_i], [h_i] <-- RNN
-    outputs, states = lstm_encoder(inputs_list, start_state, "LSTM")
 
-    rnn.bidirectional_rnn()
 
-    # running a second LSTM conditioned on the last state of the first
-    outputs_cond, states_cond = lstm_encoder(inputs_cond_list, states[-1],
-                                         "LSTMcond")
+    # Based on example code from https://github.com/aymericdamien/TensorFlow-Examples/blob/master/examples/3%20-%20Neural%20Networks/bidirectional_rnn.py
 
-    model = Projector(target_size, non_linearity=tf.nn.tanh)(outputs_cond[-1])
+    # Forward direction cell
+    lstm_fw_cell = rnn_cell.BasicLSTMCell(hidden_size, forget_bias=1.0)
+    # Backward direction cell
+    lstm_bw_cell = rnn_cell.BasicLSTMCell(hidden_size, forget_bias=1.0)
+
+    # Forward direction cell
+    lstm_fw_cell_cond = rnn_cell.BasicLSTMCell(hidden_size, forget_bias=1.0)
+    # Backward direction cell
+    lstm_bw_cell_cond = rnn_cell.BasicLSTMCell(hidden_size, forget_bias=1.0)
+
+
+    outputs_bi = rnn.bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, input_size)
+
+    outputs_bi_cond = rnn.bidirectional_rnn(lstm_fw_cell_cond, lstm_bw_cell_cond, input_size, initial_state_fw=outputs_bi[0], initial_state_bw=outputs_bi[-1])
+
+
+    model = Projector(target_size, non_linearity=tf.nn.tanh)(outputs_bi_cond[-1])
 
     return model, [inputs, inputs_cond]
 
@@ -312,16 +324,19 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
         # output of get_model(): model, [inputs, inputs_cond]
         model, placeholders = get_model_conditional(batch_size, max_seq_length, input_size,
                                                     hidden_size, target_size, vocab_size, pretrain)
+    elif modeltype == "conditional-bi":
+        model, placeholders =  get_model_conditional_bidirectional(batch_size, max_seq_length, input_size,
+                                                                   hidden_size, target_size, vocab_size, pretrain)
 
     ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
 
-    # changing class weight, doesn't help though
+    #changing class weight, doesn't help though
     #class_weight = tf.constant([0.2, 0.4, 0.4])
     #weighted_logits = tf.mul(model, class_weight)  # shape [batch_size, 3]
     #loss = tf.nn.softmax_cross_entropy_with_logits(weighted_logits, targets)
 
-    loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)#model, targets)   # targets: labels (e.g. pos/neg/neutral)
+    loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)   # targets: labels (e.g. pos/neg/neutral)
 
     optimizer = tf.train.AdamOptimizer(learning_rate)
 
@@ -506,4 +521,4 @@ def readInputAndEval(outfile, stopwords="all", testid="test1", modeltype="condit
 
 
 if __name__ == '__main__':
-    readInputAndEval("../out/results_subtaskB_puctonly_postpr_moststops_test1.txt", testid="testB", modeltype="conditional", stopwords="most", postprocess=True, testSetting=True, useClinton=True)
+    readInputAndEval("../out/results_subtaskB_bi.txt", testid="bi-test1", modeltype="conditional-bi", stopwords="most", postprocess=True, testSetting=True, useClinton=True)
