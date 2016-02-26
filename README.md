@@ -43,7 +43,6 @@ git submodule update --init --recursive
 ```
 - Make sure tfrnn-repo/naga-repo, twokenize, readwrite, and stancedetection are on PYTHONPATH
 - Run word2vec_training.py first to pre-train a word2vec model on the unlabelled data
-- 
 ```shell
 mkdir out
 cd stancedetection
