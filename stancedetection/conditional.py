@@ -592,6 +592,8 @@ def readResfilesAndEval(testSetting, outfile):
 
 
 if __name__ == '__main__':
+    np.random.seed(1337)
+    tf.set_random_seed(1337)
 
     #outfile = "../out/results_subtaskB_bi.txt"
     hidden_size = 60
