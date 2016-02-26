@@ -414,7 +414,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                      np.lib.pad(np.asarray(labels_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0))
                      ]
 
-    corpus_test_batch = BatchBucketSampler(data_test, 1)
+    corpus_test_batch = BatchBucketSampler(data_test, batch_size)
 
 
     with tf.Session() as sess:
@@ -603,7 +603,7 @@ if __name__ == '__main__':
 
     if SINGLE_RUN:
         #outfile = "../out/results_subtaskB_bi.txt"
-        hidden_size = 30
+        hidden_size = 60
         max_epochs = 21
         #testid = "2016-02-25"
         modeltype = "conditional"
@@ -620,7 +620,7 @@ if __name__ == '__main__':
 
     else:
         # code for testing different combinations below
-
+        hidden_size = 60
         #hidden_size = [60, 70, 80]
         max_epochs = [21]#[16, 21, 26, 31]
         modeltype = ["conditional"]#["conditional", "aggregated", "tweetonly"]
