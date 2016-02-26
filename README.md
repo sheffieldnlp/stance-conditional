@@ -50,5 +50,5 @@ python3 word2vec_training.py
 ```
 - To run stance detection training and test with conditional encoding:
 ```shell
-python3 stancedetection/conditional.py
+python3 conditional.py
 ```
