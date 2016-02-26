@@ -330,7 +330,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     num_samples = 5628
     #max_epochs = 21  # 100
     learning_rate = 0.01
-    batch_size = 97#101 for with Clinton  # number training examples per training epoch
+    batch_size = 32#101 for with Clinton  # number training examples per training epoch
     input_size = 100 #100 #91
     #hidden_size = 60  # making this smaller to avoid overfitting, example is 83
     #pretrain = "pre_cont"  # nopre, pre, pre_cont  : nopre: embeddings are initialised randomly,
@@ -414,7 +414,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                      np.lib.pad(np.asarray(labels_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0))
                      ]
 
-    corpus_test_batch = BatchBucketSampler(data_test, batch_size)
+    corpus_test_batch = BatchBucketSampler(data_test, 1)
 
 
     with tf.Session() as sess:
@@ -603,7 +603,7 @@ if __name__ == '__main__':
 
     if SINGLE_RUN:
         #outfile = "../out/results_subtaskB_bi.txt"
-        hidden_size = 60
+        hidden_size = 30
         max_epochs = 21
         #testid = "2016-02-25"
         modeltype = "conditional"
