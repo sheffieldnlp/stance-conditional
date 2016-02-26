@@ -2,10 +2,11 @@ import tensorflow as tf
 import numpy as np
 
 from tfrnn.rnn import Encoder, Projector, rnn_cell
-from tfrnn.hooks import SaveModelHook, AccuracyHook, LossHook, SpeedHook
+from tfrnn.hooks import SaveModelHook, AccuracyHook, LossHook, SpeedHook, TraceHook
 from tfrnn.batcher import BatchBucketSampler
 from tfrnn.util import sample_one_hot, debug_node, load_model
 from tfrnn.hooks import LoadModelHook
+import tfrnn.hooks
 from readwrite import reader, writer
 from preprocess import tokenise_tweets, transform_targets, transform_tweet, transform_labels, istargetInTweet
 #from tensorflow.models.embedding import word2vec
@@ -15,7 +16,7 @@ from tfrnn.hooks import Hook
 import os
 from tensorflow.models.rnn import rnn, rnn_cell
 import conditional_tim
-
+import numpy.ma as ma
 
 class SemEvalHook(Hook):
     """
@@ -44,6 +45,47 @@ class SemEvalHook(Hook):
                 truth_all.extend(truth)
                 pred_all.extend(predicted)
             print(classification_report(truth_all, pred_all, target_names=["NEUTRAL", "AGAINST", "FAVOR"], digits=4)) #, target_names=[0, 1, 2]))
+
+
+class AccuracyHookIgnoreNeutral(TraceHook):
+    def __init__(self, summary_writer, batcher, placeholders, at_every_epoch):
+        super().__init__(summary_writer)
+        self.batcher = batcher
+        self.placeholders = placeholders
+        self.at_every_epoch = at_every_epoch
+
+    def __call__(self, sess, epoch, iteration, model, loss):
+        if iteration == 0 and epoch % self.at_every_epoch == 0:
+            total = 0
+            total_old = 0
+            correct_old = 0
+            correct = 0
+            for values in self.batcher:
+                total_old += len(values[-1])
+                feed_dict = {}
+                for i in range(0, len(self.placeholders)):
+                    feed_dict[self.placeholders[i]] = values[i]
+                truth = np.argmax(values[-1], 1)
+
+                # mask truth
+                truth_noneutral = ma.masked_values(truth, 0)
+                truth_noneutral_compr = truth_noneutral.compressed()
+
+                predicted = sess.run(tf.arg_max(tf.nn.softmax(model), 1),
+                                     feed_dict=feed_dict)
+
+                pred_nonneutral = ma.array(predicted, mask=truth_noneutral.mask)
+                pred_nonneutral_compr = pred_nonneutral.compressed()
+
+                correct_old += sum(truth == predicted)
+                correct += sum(truth_noneutral_compr == pred_nonneutral_compr)
+                total += len(truth_noneutral_compr)
+
+            acc = float(correct) / total
+            self.update_summary(sess, iteration, "AccurayNonNeut", acc)
+            print("Epoch " + str(epoch) +
+                  "\tAccNonNeut " + str(acc) +
+                  "\tCorrect " + str(correct) + "\tTotal " + str(total))
 
 
 class SaveModelHookDev(Hook):
@@ -329,7 +371,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     # parameters
     num_samples = 5628
     #max_epochs = 21  # 100
-    learning_rate = 0.01
+    learning_rate = 0.0001
     batch_size = 97#101 for with Clinton  # number training examples per training epoch
     input_size = 100 #100 #91
     #hidden_size = 60  # making this smaller to avoid overfitting, example is 83
@@ -395,7 +437,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     pad_nr = batch_size - (
     len(labels_test) % batch_size) + 1  # since train/test batches need to be the same size, add padding for test
 
-    # prepare the testing data. Needs to be padded to fit the bath size.
+    # prepare the testing data. Needs to be padded to fit the batch size.
     if modeltype == "tweetonly":
         data_test = [np.lib.pad(np.asarray(tweets_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                  np.lib.pad(np.asarray(ids_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
@@ -424,7 +466,8 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
             SpeedHook(summary_writer, iteration_interval=50, batch_size=batch_size),
             SaveModelHookDev(path="../out/save/" + outfolder, at_every_epoch=5), #SaveModelHook(path="../out/save", at_epoch=10, at_every_epoch=2),
             #LoadModelHook("./out/save/", 10),
-            AccuracyHook(summary_writer, acc_batcher, placeholders, 5),
+            AccuracyHook(summary_writer, acc_batcher, placeholders, 2),
+            AccuracyHookIgnoreNeutral(summary_writer, acc_batcher, placeholders, 2),
             SemEvalHook(corpus_test_batch, placeholders, 2),
             LossHook(summary_writer, iteration_interval=50)
         ]
@@ -620,25 +663,26 @@ if __name__ == '__main__':
 
     else:
         # code for testing different combinations below
-        hidden_size = 60
-        #hidden_size = [60, 70, 80]
+        #hidden_size = 60
+        hidden_size = [50, 55, 60]
         max_epochs = [21]#[16, 21, 26, 31]
         modeltype = ["conditional"]#["conditional", "aggregated", "tweetonly"]
         word2vecmodel = "small"
-        #stopwords = ["most", "punctonly"]
-        tanhOrSoftmax = ["tanh"]#, "softmax"]#, "softmax"]
-        dropout = ["false"]#, "false"]#, "false"]
+        stopwords = ["most"]#, "punctonly"]
+        #tanhOrSoftmax = ["tanh"]#, "softmax"]#, "softmax"]
+        dropout = ["true", "false"]#, "false"]#, "false"]
         testsetting = ["true"]#, "false"]
 
         for i in range(10):
             for modelt in modeltype:
-                for tos in tanhOrSoftmax:
+                for stop in stopwords:
                     for drop in dropout:
                         for tests in testsetting:
                             for me in max_epochs:
-                                outfile = "../out/results_ignoreneut_" + tests + "_" + modelt + "_" + str(hidden_size) + "_" + drop + "_" + tos + "_" + str(me) + "_" + str(i) + ".txt"
-                                print(outfile)
-                                #readResfilesAndEval(tests, outfile)
+                                for hid in hidden_size:
+                                    outfile = "../out/results_learn-1e-3_" + tests + "_" + modelt + "_hidd" + str(hid) + "_drop" + drop + "_" + stop + "_epochs" + str(me) + "_" + str(i) + ".txt"
+                                    print(outfile)
+                                    #readResfilesAndEval(tests, outfile)
 
-                                readInputAndEval(tests, outfile, hidden_size, me, tos, drop, stopwords, str(i), modelt, word2vecmodel)
-                                tf.ops.reset_default_graph()
+                                    readInputAndEval(tests, outfile, hid, me, "tanh", drop, stop, str(i), modelt, word2vecmodel)
+                                    tf.ops.reset_default_graph()
