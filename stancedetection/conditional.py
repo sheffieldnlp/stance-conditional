@@ -127,7 +127,7 @@ def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, t
     cont_train = True
     if pretrain == "pre": # continue training embeddings or not. Currently works better to continue training them.
         cont_train = False
-    embedding_matrix = tf.Variable(tf.random_normal([vocab_size, input_size]),  #input_size is embeddings size
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  #input_size is embeddings size
                                    name="embedding_matrix", trainable=cont_train)
 
     # batch_size x max_seq_length x input_size
@@ -176,7 +176,7 @@ def get_model_aggr(batch_size, max_seq_length, input_size, hidden_size, target_s
     cont_train = True
     if pretrain == "pre":
         cont_train = False
-    embedding_matrix = tf.Variable(tf.random_normal([vocab_size, input_size]),  # input_size is embeddings size
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  # input_size is embeddings size
                                name="embedding_matrix", trainable=cont_train)
 
     # batch_size x max_seq_length x input_size
@@ -222,7 +222,7 @@ def get_model_tweetonly(batch_size, max_seq_length, input_size, hidden_size, tar
     cont_train = True
     if pretrain == "pre":
         cont_train = False
-    embedding_matrix = tf.Variable(tf.random_normal([vocab_size, input_size]),  # input_size is embeddings size
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  # input_size is embeddings size
                                name="embedding_matrix", trainable=cont_train)
 
     # batch_size x max_seq_length x input_size
@@ -270,7 +270,7 @@ def get_model_conditional_bidirectional(batch_size, max_seq_length, input_size, 
     cont_train = True
     if pretrain == "pre":  # continue training embeddings or not. Currently works better to continue training them.
         cont_train = False
-    embedding_matrix = tf.Variable(tf.random_normal([vocab_size, input_size]),  # input_size is embeddings size
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  # input_size is embeddings size
                                name="embedding_matrix", trainable=cont_train)
 
     # batch_size x max_seq_length x input_size
