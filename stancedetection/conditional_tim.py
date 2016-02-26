@@ -127,7 +127,7 @@ def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, t
     cont_train = True
     if pretrain == "pre": # continue training embeddings or not. Currently works better to continue training them.
         cont_train = False
-    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1, seed=1337),  #input_size is embeddings size
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  #input_size is embeddings size
                                    name="embedding_matrix", trainable=cont_train)
 
     # batch_size x max_seq_length x input_size
@@ -142,7 +142,11 @@ def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, t
     inputs_cond_list = [tf.squeeze(x) for x in
                         tf.split(1, max_seq_length, embedded_inputs_cond)]
 
-    lstm_encoder = Encoder(rnn_cell.BasicLSTMCell, input_size, hidden_size)
+    drop_prob = None
+    if dropout:
+        drop_prob = 0.1
+    lstm_encoder = Encoder(rnn_cell.BasicLSTMCell, input_size, hidden_size, drop_prob, drop_prob)
+
     start_state = tf.zeros([batch_size, lstm_encoder.state_size])
 
     # [h_i], [h_i, c_i] <-- LSTM
@@ -153,14 +157,14 @@ def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, t
     outputs_cond, states_cond = lstm_encoder(inputs_cond_list, states[-1],
                                              "LSTMcond")
 
-    if dropout == "true":
-        outputs_fin = (tf.nn.dropout(outputs_cond[-1], 0.1))
-    else:
-        outputs_fin = outputs_cond[-1]
+    #if dropout == "true":
+    #    outputs_fin = (tf.nn.dropout(outputs_cond[-1], 0.1))
+    #else:
+    outputs_fin = outputs_cond[-1]
     if tanhOrSoftmax == "tanh":
-        model = Projector(target_size, non_linearity=tf.nn.tanh)(outputs_fin) #tf.nn.softmax
+        model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin) #tf.nn.softmax
     else:
-        model = Projector(target_size, non_linearity=tf.nn.softmax)(outputs_fin)  # tf.nn.softmax
+        model = Projector(target_size, non_linearity=tf.nn.softmax, bias=True)(outputs_fin)  # tf.nn.softmax
 
     return model, [inputs, inputs_cond]
 
@@ -176,7 +180,7 @@ def get_model_aggr(batch_size, max_seq_length, input_size, hidden_size, target_s
     cont_train = True
     if pretrain == "pre":
         cont_train = False
-    embedding_matrix = tf.Variable(tf.random_normal([vocab_size, input_size]),  # input_size is embeddings size
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  # input_size is embeddings size
                                name="embedding_matrix", trainable=cont_train)
 
     # batch_size x max_seq_length x input_size
@@ -222,7 +226,7 @@ def get_model_tweetonly(batch_size, max_seq_length, input_size, hidden_size, tar
     cont_train = True
     if pretrain == "pre":
         cont_train = False
-    embedding_matrix = tf.Variable(tf.random_normal([vocab_size, input_size]),  # input_size is embeddings size
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  # input_size is embeddings size
                                name="embedding_matrix", trainable=cont_train)
 
     # batch_size x max_seq_length x input_size
@@ -270,7 +274,7 @@ def get_model_conditional_bidirectional(batch_size, max_seq_length, input_size, 
     cont_train = True
     if pretrain == "pre":  # continue training embeddings or not. Currently works better to continue training them.
         cont_train = False
-    embedding_matrix = tf.Variable(tf.random_normal([vocab_size, input_size]),  # input_size is embeddings size
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  # input_size is embeddings size
                                name="embedding_matrix", trainable=cont_train)
 
     # batch_size x max_seq_length x input_size
@@ -323,9 +327,10 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     # TO DO: add l2 regularisation and dropout
 
     # parameters
+    num_samples = 5628
     #max_epochs = 21  # 100
     learning_rate = 0.01
-    batch_size = 100#101 for with Clinton  # number training examples per training epoch
+    batch_size = 97#101 for with Clinton  # number training examples per training epoch
     input_size = 100 #100 #91
     #hidden_size = 60  # making this smaller to avoid overfitting, example is 83
     #pretrain = "pre_cont"  # nopre, pre, pre_cont  : nopre: embeddings are initialised randomly,
@@ -369,7 +374,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
 
     #changing class weight, doesn't seem to help though
-    if ignorelossneut == True:
+    if ignorelossneut:
         alpha = 0.1
         #class_weight = tf.constant([0.2, 0.4, 0.4])
         #weighted_logits = tf.mul(model, class_weight)  # shape [batch_size, 3]
@@ -416,12 +421,12 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
         summary_writer = tf.train.SummaryWriter("./out/save", graph_def=sess.graph_def)
 
         hooks = [
-            SpeedHook(summary_writer, iteration_interval=10, batch_size=batch_size),
+            SpeedHook(summary_writer, iteration_interval=50, batch_size=batch_size),
             SaveModelHookDev(path="../out/save/" + outfolder, at_every_epoch=5), #SaveModelHook(path="../out/save", at_epoch=10, at_every_epoch=2),
             #LoadModelHook("./out/save/", 10),
             AccuracyHook(summary_writer, acc_batcher, placeholders, 5),
             SemEvalHook(corpus_test_batch, placeholders, 2),
-            LossHook(summary_writer, iteration_interval=10)
+            LossHook(summary_writer, iteration_interval=50)
         ]
 
         trainer = Trainer(optimizer, max_epochs, hooks)
@@ -591,47 +596,49 @@ def readResfilesAndEval(testSetting, outfile):
 
 
 if __name__ == '__main__':
-
     np.random.seed(1337)
     tf.set_random_seed(1337)
 
-    #outfile = "../out/results_subtaskB_bi.txt"
-    hidden_size = 30
-    max_epochs = 21
-    #testid = "2016-02-25"
-    modeltype = "conditional"
-    word2vecmodel = "small"
-    stopwords = "most"#"punctonly"
-    tanhOrSoftmax = "tanh"
-    dropout = "false"#"true"
-    testsetting = "true"
-    testid = "test1"
+    SINGLE_RUN = True
 
-    outfile = "../out/results_quicktest_" + testsetting + "_" + modeltype + "_" + str(hidden_size) + "_" + dropout + "_" + tanhOrSoftmax + "_" + str(max_epochs) + "_" + testid + ".txt"
+    if SINGLE_RUN:
+        #outfile = "../out/results_subtaskB_bi.txt"
+        hidden_size = 60
+        max_epochs = 21
+        #testid = "2016-02-25"
+        modeltype = "conditional"
+        word2vecmodel = "small"
+        stopwords = "most"#"punctonly"
+        tanhOrSoftmax = "tanh"
+        dropout = "true"#"true"
+        testsetting = "true"
+        testid = "test1"
 
-    readInputAndEval(testsetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords, testid, modeltype, word2vecmodel)
+        outfile = "../out/results_quicktest_" + testsetting + "_" + modeltype + "_" + str(hidden_size) + "_" + dropout + "_" + tanhOrSoftmax + "_" + str(max_epochs) + "_" + testid + ".txt"
 
+        readInputAndEval(testsetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords, testid, modeltype, word2vecmodel)
 
-    # code for testing different combinations below
-    #
-    # #hidden_size = [60, 70, 80]
-    # max_epochs = [21]#[16, 21, 26, 31]
-    # modeltype = ["conditional"]#["conditional", "aggregated", "tweetonly"]
-    # word2vecmodel = "small"
-    # #stopwords = ["most", "punctonly"]
-    # tanhOrSoftmax = ["tanh"]#, "softmax"]#, "softmax"]
-    # dropout = ["false"]#, "false"]#, "false"]
-    # testsetting = ["true"]#, "false"]
-    #
-    # for i in range(10):
-    #     for modelt in modeltype:
-    #         for tos in tanhOrSoftmax:
-    #             for drop in dropout:
-    #                 for tests in testsetting:
-    #                     for me in max_epochs:
-    #                         outfile = "../out/results_ignoreneut_" + tests + "_" + modelt + "_" + str(hidden_size) + "_" + drop + "_" + tos + "_" + str(me) + "_" + str(i) + ".txt"
-    #                         print(outfile)
-    #                         #readResfilesAndEval(tests, outfile)
-    #
-    #                         readInputAndEval(tests, outfile, hidden_size, me, tos, drop, stopwords, str(i), modelt, word2vecmodel)
-    #                         tf.ops.reset_default_graph()
+    else:
+        # code for testing different combinations below
+
+        #hidden_size = [60, 70, 80]
+        max_epochs = [21]#[16, 21, 26, 31]
+        modeltype = ["conditional"]#["conditional", "aggregated", "tweetonly"]
+        word2vecmodel = "small"
+        #stopwords = ["most", "punctonly"]
+        tanhOrSoftmax = ["tanh"]#, "softmax"]#, "softmax"]
+        dropout = ["false"]#, "false"]#, "false"]
+        testsetting = ["true"]#, "false"]
+
+        for i in range(10):
+            for modelt in modeltype:
+                for tos in tanhOrSoftmax:
+                    for drop in dropout:
+                        for tests in testsetting:
+                            for me in max_epochs:
+                                outfile = "../out/results_ignoreneut_" + tests + "_" + modelt + "_" + str(hidden_size) + "_" + drop + "_" + tos + "_" + str(me) + "_" + str(i) + ".txt"
+                                print(outfile)
+                                #readResfilesAndEval(tests, outfile)
+
+                                readInputAndEval(tests, outfile, hidden_size, me, tos, drop, stopwords, str(i), modelt, word2vecmodel)
+                                tf.ops.reset_default_graph()
