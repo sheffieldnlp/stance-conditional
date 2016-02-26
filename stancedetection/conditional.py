@@ -327,7 +327,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     #max_epochs = 21  # 100
     learning_rate = 0.01
     batch_size = 97#101 for with Clinton  # number training examples per training epoch
-    input_size = 100 #91
+    input_size = 100 #100 #91
     #hidden_size = 60  # making this smaller to avoid overfitting, example is 83
     #pretrain = "pre_cont"  # nopre, pre, pre_cont  : nopre: embeddings are initialised randomly,
                            # pre: word2vec model is loaded, pre_cont: word2vec is loaded and further trained
@@ -392,7 +392,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                  np.lib.pad(np.asarray(ids_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                  np.lib.pad(np.asarray(labels_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0))
                  ]
-    elif reversecondidional == False:
+    elif reversecondidional == True:
         data_test = [np.lib.pad(np.asarray(targets_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                      np.lib.pad(np.asarray(tweets_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                      np.lib.pad(np.asarray(ids_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
@@ -592,7 +592,7 @@ if __name__ == '__main__':
     word2vecmodel = "small"
     stopwords = "most"#"punctonly"
     tanhOrSoftmax = "tanh"
-    dropout = "true"
+    dropout = "true"#"true"
     testsetting = "true"
     testid = "test1"
 
@@ -603,14 +603,13 @@ if __name__ == '__main__':
 
     # code for testing different combinations below
 
-    ##hidden_size = [60, 70, 80]
-    #max_epochs = [16, 21, 26, 31]
+    #hidden_size = [60, 70, 80]
+    #max_epochs = [21]#[16, 21, 26, 31]
     #modeltype = ["conditional"]#["conditional", "aggregated", "tweetonly"]
-    #word2vecmodel = ["small"]#, "big"]
-    ##word2vecmodel = "small"
-    ##stopwords = ["most", "punctonly"]
-    #tanhOrSoftmax = ["tanh"]#, "softmax"]
-    #dropout = ["true"]#, "false"]
+    #word2vecmodel = "small"
+    #stopwords = ["most", "punctonly"]
+    #tanhOrSoftmax = ["tanh"]#, "softmax"]#, "softmax"]
+    #dropout = ["true", "false"]#, "false"]
     #testsetting = ["true"]#, "false"]
 
     #for i in range(10):
@@ -619,7 +618,7 @@ if __name__ == '__main__':
     #            for drop in dropout:
     #                for tests in testsetting:
     #                    for me in max_epochs:
-    #                        outfile = "../out/results_ignlossneut_" + tests + "_" + modelt + "_" + str(hidden_size) + "_" + drop + "_" + tos + "_" + str(me) + "_" + str(i) + ".txt"
+    #                        outfile = "../out/results_90input_" + tests + "_" + modelt + "_" + str(hidden_size) + "_" + drop + "_" + tos + "_" + str(me) + "_" + str(i) + ".txt"
     #                        print(outfile)
                             #readResfilesAndEval(tests, outfile)
 
