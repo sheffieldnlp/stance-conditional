@@ -52,3 +52,5 @@ python3 word2vec_training.py
 ```shell
 python3 conditional.py
 ```
+
+Note that accuracy and loss are printed during training for the training set, whereas P/R/F1 are printed during training for the dev or test set.
