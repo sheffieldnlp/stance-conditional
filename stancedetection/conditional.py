@@ -15,6 +15,8 @@ from tfrnn.hooks import Hook
 import os
 from tensorflow.models.rnn import rnn, rnn_cell
 
+
+
 class SemEvalHook(Hook):
     """
     Evaluting P/R/F on dev data while training
@@ -151,7 +153,7 @@ def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, t
     outputs_cond, states_cond = lstm_encoder(inputs_cond_list, states[-1],
                                              "LSTMcond")
 
-    if dropout == True:
+    if dropout == "true":
         outputs_fin = (tf.nn.dropout(outputs_cond[-1], 0.1))
     else:
         outputs_fin = outputs_cond[-1]
@@ -196,7 +198,7 @@ def get_model_aggr(batch_size, max_seq_length, input_size, hidden_size, target_s
     # [h_i], [h_i] <-- RNN
     outputs, states = lstm_encoder(inputs_list, start_state, "LSTM")
 
-    if dropout == True:
+    if dropout == "true":
         outputs_fin = (tf.nn.dropout(outputs[-1], 0.1))
     else:
         outputs_fin = outputs[-1]
@@ -240,7 +242,7 @@ def get_model_tweetonly(batch_size, max_seq_length, input_size, hidden_size, tar
     # [h_i], [h_i] <-- RNN
     outputs, states = lstm_encoder(inputs_list, start_state, "LSTM")
 
-    if dropout == True:
+    if dropout == "true":
         outputs_fin = (tf.nn.dropout(outputs[-1], 0.1))
     else:
         outputs_fin = outputs[-1]
@@ -317,7 +319,7 @@ def get_model_conditional_bidirectional(batch_size, max_seq_length, input_size, 
 
 
 
-def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, hidden_size, max_epochs, tanhOrSoftmax, dropout, reversecondidional=False, modeltype="conditional", targetInTweet={}, testid = "test-1", pretrain = "pre_cont"):
+def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, hidden_size, max_epochs, tanhOrSoftmax, dropout, reversecondidional=False, modeltype="conditional", targetInTweet={}, testid = "test-1", pretrain = "pre_cont", ignorelossneut=False,):
     # TO DO: add l2 regularisation and dropout
 
     # parameters
@@ -331,7 +333,7 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
                            # pre: word2vec model is loaded, pre_cont: word2vec is loaded and further trained
     #aggregated = False
     #tweetonly = False
-    outfolder = "_".join([modeltype, "input-" + str(input_size), "hidden-" + str(hidden_size), pretrain, testid])
+    outfolder = "_".join([testid, modeltype, testsetting, "hidden-" + str(hidden_size), tanhOrSoftmax])
 
     # real data stance-semeval
     target_size = 3
@@ -364,12 +366,14 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
     ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
 
-    #changing class weight, doesn't help though
-    #class_weight = tf.constant([0.2, 0.4, 0.4])
-    #weighted_logits = tf.mul(model, class_weight)  # shape [batch_size, 3]
-    #loss = tf.nn.softmax_cross_entropy_with_logits(weighted_logits, targets)
+    #changing class weight, doesn't seem to help though
+    if ignorelossneut == True:
+        class_weight = tf.constant([0.2, 0.4, 0.4])
+        weighted_logits = tf.mul(model, class_weight)  # shape [batch_size, 3]
+        loss = tf.nn.softmax_cross_entropy_with_logits(weighted_logits, targets)
 
-    loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)   # targets: labels (e.g. pos/neg/neutral)
+    else:
+        loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)   # targets: labels (e.g. pos/neg/neutral)
 
     optimizer = tf.train.AdamOptimizer(learning_rate)
 
@@ -480,7 +484,7 @@ def test_trainer(w2vmodel, tweets, targets, labels, ids, tweets_test, targets_te
 
 
 
-def readInputAndEval(outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", reversecondidional=False, postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, testSetting=True):
+def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", reversecondidional=False, postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, ignorelossneut=False):
     """
     Reading input files, calling the trainer for training the model, evaluate with official script
     :param outfile: name for output file
@@ -494,13 +498,13 @@ def readInputAndEval(outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, s
     # phrasemodel = Phrases.load("../out/phrase_all.model")
     target = "clinton"
 
-    if word2vec == "small":
+    if word2vecmodel == "small":
         w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context")
     else:
         w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context_big")
 
 
-    if testSetting == True:
+    if testSetting == "true":
         trainingdata = "../data/semeval2016-task6-train+dev.txt"
         testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
         target = "trump"
@@ -554,10 +558,10 @@ def readInputAndEval(outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, s
         id_tweet_dict = dict(zip(ids_test_list, tweets_test))
         targetInTweet = istargetInTweet(id_tweet_dict, target)
 
-    predictions_all, predictions_detailed_all, ids_all = test_trainer(w2vmodel, transformed_tweets, transformed_targets, transformed_labels, ids, transformed_tweets_test,
+    predictions_all, predictions_detailed_all, ids_all = test_trainer(testSetting, w2vmodel, transformed_tweets, transformed_targets, transformed_labels, ids, transformed_tweets_test,
                                                                       transformed_targets_test, transformed_labels_test, ids_test, hidden_size, max_epochs,
                                                                       tanhOrSoftmax, dropout, reversecondidional, modeltype, targetInTweet,
-                                                                      testid)
+                                                                      testid, ignorelossneut=ignorelossneut)
 
 
 
@@ -565,17 +569,59 @@ def readInputAndEval(outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, s
     writer.eval(testdata, outfile)
 
 
+def readResfilesAndEval(testSetting, outfile):
+
+        if testSetting == "true":
+            trainingdata = "../data/semeval2016-task6-train+dev.txt"
+            testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
+            target = "trump"
+        else:
+            trainingdata = "../data/semeval2016-task6-trainingdata_new.txt"
+            testdata = "../data/semEval2016-task6-trialdata_new.txt"
+
+        writer.eval(testdata, outfile)
+
+
 if __name__ == '__main__':
 
-    outfile = "../out/results_subtaskB_bi.txt"
+    #outfile = "../out/results_subtaskB_bi.txt"
     hidden_size = 60
-    max_epochs = 20
-    testid = "2016-02-25"
+    max_epochs = 21
+    #testid = "2016-02-25"
     modeltype = "conditional"
     word2vecmodel = "small"
-    stopwords = "most"
+    stopwords = "most"#"punctonly"
     tanhOrSoftmax = "tanh"
-    dropout = True
-    testsetting = True
+    dropout = "true"
+    testsetting = "true"
+    testid = "test1"
 
-    readInputAndEval(outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords, testid, modeltype, word2vecmodel, testSetting=testsetting)
+    outfile = "../out/results_quicktest_" + testsetting + "_" + modeltype + "_" + str(hidden_size) + "_" + dropout + "_" + tanhOrSoftmax + "_" + str(max_epochs) + "_" + testid + ".txt"
+
+    readInputAndEval(testsetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords, testid, modeltype, word2vecmodel)
+
+
+    # code for testing different combinations below
+
+    ##hidden_size = [60, 70, 80]
+    #max_epochs = [16, 21, 26, 31]
+    #modeltype = ["conditional"]#["conditional", "aggregated", "tweetonly"]
+    #word2vecmodel = ["small"]#, "big"]
+    ##word2vecmodel = "small"
+    ##stopwords = ["most", "punctonly"]
+    #tanhOrSoftmax = ["tanh"]#, "softmax"]
+    #dropout = ["true"]#, "false"]
+    #testsetting = ["true"]#, "false"]
+
+    #for i in range(10):
+    #    for modelt in modeltype:
+    #        for tos in tanhOrSoftmax:
+    #            for drop in dropout:
+    #                for tests in testsetting:
+    #                    for me in max_epochs:
+    #                        outfile = "../out/results_ignlossneut_" + tests + "_" + modelt + "_" + str(hidden_size) + "_" + drop + "_" + tos + "_" + str(me) + "_" + str(i) + ".txt"
+    #                        print(outfile)
+                            #readResfilesAndEval(tests, outfile)
+
+    #                        readInputAndEval(tests, outfile, hidden_size, me, tos, drop, stopwords, str(i), modelt, word2vecmodel, ignorelossneut=True)
+    #                        tf.ops.reset_default_graph()
