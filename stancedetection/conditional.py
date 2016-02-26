@@ -414,7 +414,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                      np.lib.pad(np.asarray(labels_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0))
                      ]
 
-    corpus_test_batch = BatchBucketSampler(data_test, 1)
+    corpus_test_batch = BatchBucketSampler(data_test, batch_size)
 
 
     with tf.Session() as sess:
@@ -599,7 +599,7 @@ if __name__ == '__main__':
     np.random.seed(1337)
     tf.set_random_seed(1337)
 
-    SINGLE_RUN = True
+    SINGLE_RUN = False
 
     if SINGLE_RUN:
         #outfile = "../out/results_subtaskB_bi.txt"
