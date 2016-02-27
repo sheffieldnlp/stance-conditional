@@ -164,7 +164,7 @@ class Trainer(object):
         if close_session_after_training:
             session.close()
 
-        return epoch
+        return max_epochs-1
 
 
 def load_model_dev(sess, path, modelname):
@@ -693,7 +693,7 @@ if __name__ == '__main__':
                         for tests in testsetting:
                             for at in acc_tresh:
                                 for hid in hidden_size:
-                                    outfile = "../out/results_learn-1e-3_tests-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + "stop-most" + "_accthresh" + str(at) + "_" + str(i) + ".txt"
+                                    outfile = "../out/results_learn-1e-3_test-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + "stop-most" + "_accthresh" + str(at) + "_" + str(i) + ".txt"
                                     print(outfile)
                                     #readResfilesAndEval(tests, outfile)
 
