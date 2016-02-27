@@ -86,6 +86,8 @@ class AccuracyHookIgnoreNeutral(TraceHook):
             print("Epoch " + str(epoch) +
                   "\tAccNonNeut " + str(acc) +
                   "\tCorrect " + str(correct) + "\tTotal " + str(total))
+            return acc
+        return 0.0
 
 
 class SaveModelHookDev(Hook):
@@ -116,7 +118,7 @@ class Trainer(object):
         self.max_epochs = max_epochs
         self.hooks = hooks
 
-    def __call__(self, batcher, placeholders, loss, pretrain, embedd, model=None, session=None):
+    def __call__(self, batcher, placeholders, loss, acc_thresh, pretrain, embedd, model=None, session=None):
         self.loss = loss
         minimization_op = self.optimizer.minimize(loss)
         close_session_after_training = False
@@ -147,11 +149,22 @@ class Trainer(object):
 
             # calling post-epoch hooks
             for hook in self.hooks:
-                hook(session, epoch, 0, model, 0)
+
+                if isinstance(hook, AccuracyHookIgnoreNeutral):
+                    acc = hook(session, epoch, 0, model, 0)
+                    if acc > acc_thresh:
+                        print("Accuracy threshold reached! Stopping training.")
+                        if close_session_after_training:
+                            session.close()
+                        return epoch
+                else:
+                    hook(session, epoch, 0, model, 0)
             epoch += 1
 
         if close_session_after_training:
             session.close()
+
+        return epoch
 
 
 def load_model_dev(sess, path, modelname):
@@ -365,7 +378,7 @@ def get_model_conditional_bidirectional(batch_size, max_seq_length, input_size, 
 
 
 
-def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, hidden_size, max_epochs, tanhOrSoftmax, dropout, reversecondidional=False, modeltype="conditional", targetInTweet={}, testid = "test-1", pretrain = "pre_cont", ignorelossneut=False,):
+def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, hidden_size, max_epochs, tanhOrSoftmax, dropout, reversecondidional=False, modeltype="conditional", targetInTweet={}, testid = "test-1", pretrain = "pre_cont", ignorelossneut=False, acc_thresh=0.9):
     # TO DO: add l2 regularisation and dropout
 
     # parameters
@@ -464,16 +477,16 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
         hooks = [
             SpeedHook(summary_writer, iteration_interval=50, batch_size=batch_size),
-            SaveModelHookDev(path="../out/save/" + outfolder, at_every_epoch=5), #SaveModelHook(path="../out/save", at_epoch=10, at_every_epoch=2),
+            SaveModelHookDev(path="../out/save/" + outfolder, at_every_epoch=2), #SaveModelHook(path="../out/save", at_epoch=10, at_every_epoch=2),
             #LoadModelHook("./out/save/", 10),
+            SemEvalHook(corpus_test_batch, placeholders, 1),
+            LossHook(summary_writer, iteration_interval=50),
             AccuracyHook(summary_writer, acc_batcher, placeholders, 2),
-            AccuracyHookIgnoreNeutral(summary_writer, acc_batcher, placeholders, 2),
-            SemEvalHook(corpus_test_batch, placeholders, 2),
-            LossHook(summary_writer, iteration_interval=50)
+            AccuracyHookIgnoreNeutral(summary_writer, acc_batcher, placeholders, 2)
         ]
 
         trainer = Trainer(optimizer, max_epochs, hooks)
-        trainer(batcher=batcher, pretrain=pretrain, embedd=X, placeholders=placeholders, loss=loss, model=model)
+        epoch = trainer(batcher=batcher, acc_thresh=acc_thresh, pretrain=pretrain, embedd=X, placeholders=placeholders, loss=loss, model=model)
 
 
         print("Applying to test data, getting predictions for NONE/AGAINST/FAVOR")
@@ -483,8 +496,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
         predictions_all = []
         ids_all = []
 
-    #with tf.Session() as sess:
-        load_model_dev(sess, "../out/save/" + outfolder + "_ep" + str(max_epochs-1), "model.tf")
+        load_model_dev(sess, "../out/save/" + outfolder + "_ep" + str(epoch), "model.tf")
 
         total = 0
         correct = 0
@@ -540,7 +552,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
 
 
-def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", reversecondidional=False, postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, ignorelossneut=False):
+def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", reversecondidional=False, postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, ignorelossneut=False, acc_thresh=0.9):
     """
     Reading input files, calling the trainer for training the model, evaluate with official script
     :param outfile: name for output file
@@ -617,7 +629,7 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftma
     predictions_all, predictions_detailed_all, ids_all = test_trainer(testSetting, w2vmodel, transformed_tweets, transformed_targets, transformed_labels, ids, transformed_tweets_test,
                                                                       transformed_targets_test, transformed_labels_test, ids_test, hidden_size, max_epochs,
                                                                       tanhOrSoftmax, dropout, reversecondidional, modeltype, targetInTweet,
-                                                                      testid, ignorelossneut=ignorelossneut)
+                                                                      testid, ignorelossneut=ignorelossneut, acc_thresh=acc_thresh)
 
 
 
@@ -665,12 +677,13 @@ if __name__ == '__main__':
         # code for testing different combinations below
         #hidden_size = 60
         hidden_size = [50, 55, 60]
-        max_epochs = [21]#[16, 21, 26, 31]
+        #max_epochs = [21]#[16, 21, 26, 31]
+        acc_tresh = [0.8, 0.9, 0.92, 0.94, 0.96, 0.98, 0.99]
         modeltype = ["conditional"]#["conditional", "aggregated", "tweetonly"]
         word2vecmodel = "small"
         stopwords = ["most"]#, "punctonly"]
         #tanhOrSoftmax = ["tanh"]#, "softmax"]#, "softmax"]
-        dropout = ["true", "false"]#, "false"]#, "false"]
+        dropout = ["true"]#, "false"]#, "false"]#, "false"]
         testsetting = ["true"]#, "false"]
 
         for i in range(10):
@@ -678,11 +691,11 @@ if __name__ == '__main__':
                 for stop in stopwords:
                     for drop in dropout:
                         for tests in testsetting:
-                            for me in max_epochs:
+                            for at in acc_tresh:
                                 for hid in hidden_size:
-                                    outfile = "../out/results_learn-1e-3_" + tests + "_" + modelt + "_hidd" + str(hid) + "_drop" + drop + "_" + stop + "_epochs" + str(me) + "_" + str(i) + ".txt"
+                                    outfile = "../out/results_learn-1e-3_" + tests + "_" + modelt + "_hidd" + str(hid) + "_drop" + drop + "_" + stop + "_accthresh" + str(at) + "_" + str(i) + ".txt"
                                     print(outfile)
                                     #readResfilesAndEval(tests, outfile)
 
-                                    readInputAndEval(tests, outfile, hid, me, "tanh", drop, stop, str(i), modelt, word2vecmodel)
+                                    readInputAndEval(tests, outfile, hid, 101, "tanh", drop, stop, str(i), modelt, word2vecmodel, acc_thresh=at)
                                     tf.ops.reset_default_graph()
