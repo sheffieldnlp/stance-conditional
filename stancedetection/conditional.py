@@ -680,7 +680,7 @@ if __name__ == '__main__':
         #max_epochs = [21]#[16, 21, 26, 31]
         acc_tresh = [0.8, 0.9, 0.92, 0.94, 0.96, 0.98, 0.99]
         modeltype = ["conditional"]#["conditional", "aggregated", "tweetonly"]
-        word2vecmodel = "small"
+        word2vecmodel = ["small", "big"]
         stopwords = ["most"]#, "punctonly"]
         #tanhOrSoftmax = ["tanh"]#, "softmax"]#, "softmax"]
         dropout = ["true"]#, "false"]#, "false"]#, "false"]
@@ -688,14 +688,14 @@ if __name__ == '__main__':
 
         for i in range(10):
             for modelt in modeltype:
-                for stop in stopwords:
+                for w2v in word2vecmodel:
                     for drop in dropout:
                         for tests in testsetting:
                             for at in acc_tresh:
                                 for hid in hidden_size:
-                                    outfile = "../out/results_learn-1e-3_" + tests + "_" + modelt + "_hidd" + str(hid) + "_drop" + drop + "_" + stop + "_accthresh" + str(at) + "_" + str(i) + ".txt"
+                                    outfile = "../out/results_learn-1e-3_tests-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + "stop-most" + "_accthresh" + str(at) + "_" + str(i) + ".txt"
                                     print(outfile)
                                     #readResfilesAndEval(tests, outfile)
 
-                                    readInputAndEval(tests, outfile, hid, 101, "tanh", drop, stop, str(i), modelt, word2vecmodel, acc_thresh=at)
+                                    readInputAndEval(tests, outfile, hid, 101, "tanh", drop, "most", str(i), modelt, acc_thresh=at, word2vecmodel=w2v)
                                     tf.ops.reset_default_graph()
