@@ -321,6 +321,200 @@ def get_model_tweetonly(batch_size, max_seq_length, input_size, hidden_size, tar
 
 
 
+def get_model_experimental(batch_size, max_seq_length, input_size, hidden_size, target_size,
+                               vocab_size, pretrain, tanhOrSoftmax, dropout):
+
+
+    # batch_size x max_seq_length
+    inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
+    inputs_cond = tf.placeholder(tf.int32, [batch_size, max_seq_length])
+
+    cont_train = True
+    if pretrain == "pre":  # continue training embeddings or not. Currently works better to continue training them.
+        cont_train = False
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  # input_size is embeddings size
+                               name="embedding_matrix", trainable=cont_train)
+
+    # batch_size x max_seq_length x input_size
+    embedded_inputs = tf.nn.embedding_lookup(embedding_matrix, inputs)
+    embedded_inputs_cond = tf.nn.embedding_lookup(embedding_matrix, inputs_cond)
+
+    # [batch_size x inputs_size] with max_seq_length elements
+    # fixme: possibly inefficient
+    # inputs_list[0]: batch_size x input[0] <-- word vector of the first word
+    inputs_list = [tf.squeeze(x) for x in
+               tf.split(1, max_seq_length, embedded_inputs)]
+    inputs_cond_list = [tf.squeeze(x) for x in
+                    tf.split(1, max_seq_length, embedded_inputs_cond)]
+
+    drop_prob = None
+    if dropout:
+        drop_prob = 0.1
+    lstm_encoder = Encoder(rnn_cell.BasicLSTMCell, input_size, hidden_size, drop_prob, drop_prob)
+
+    start_state = tf.zeros([batch_size, lstm_encoder.state_size])
+
+    ### FORWARD
+
+    # [h_i], [h_i, c_i] <-- LSTM
+    # [h_i], [h_i] <-- RNN
+    fw_outputs, fw_states = lstm_encoder(inputs_list, start_state, "LSTM")
+
+    # running a second LSTM conditioned on the last state of the first
+    fw_outputs_cond, fw_states_cond = lstm_encoder(inputs_cond_list, fw_states[-1],
+                                               "LSTMcond")
+
+    fw_outputs_fin = fw_outputs_cond[-1]
+
+    ### BACKWARD
+    bw_outputs, bw_states = lstm_encoder(inputs_list[::-1], start_state, "LSTM_bw")
+    bw_outputs_cond, bw_states_cond = lstm_encoder(inputs_cond_list[::-1], bw_states[-1],
+                                               "LSTMcond_bw")
+    bw_outputs_fin = bw_outputs_cond[-1]
+
+    outputs_fin = tf.concat(1, [fw_outputs_fin, bw_outputs_fin])
+
+    # outputs_fin = fw_outputs_fin
+
+    # outputs_fin = tf.Print(outputs_fin, [tf.shape(outputs_fin), tf.shape(fw_outputs_fin)])
+
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax, bias=True)(outputs_fin)  # tf.nn.softmax
+
+    return model, [inputs, inputs_cond]
+
+
+
+def get_model_conditional_target_feed(batch_size, max_seq_length, input_size, hidden_size, target_size,
+                                      vocab_size, pretrain, tanhOrSoftmax, dropout):
+    # batch_size x max_seq_length
+    inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
+    inputs_cond = tf.placeholder(tf.int32, [batch_size, max_seq_length])
+
+    cont_train = True
+    if pretrain == "pre":  # continue training embeddings or not. Currently works better to continue training them.
+        cont_train = False
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),
+                                   # input_size is embeddings size
+                                   name="embedding_matrix", trainable=cont_train)
+
+    # batch_size x max_seq_length x input_size
+    embedded_inputs = tf.nn.embedding_lookup(embedding_matrix, inputs)
+    embedded_inputs_cond = tf.nn.embedding_lookup(embedding_matrix, inputs_cond)
+
+    # [batch_size x inputs_size] with max_seq_length elements
+    # fixme: possibly inefficient
+    # inputs_list[0]: batch_size x input[0] <-- word vector of the first word
+    inputs_list = [tf.squeeze(x) for x in
+                   tf.split(1, max_seq_length, embedded_inputs)]
+
+    drop_prob = None
+    if dropout:
+        drop_prob = 0.1
+    lstm_encoder_target = Encoder(rnn_cell.BasicLSTMCell, input_size, hidden_size, drop_prob, drop_prob)
+
+    start_state = tf.zeros([batch_size, lstm_encoder_target.state_size])
+
+    # [h_i], [h_i, c_i] <-- LSTM
+    # [h_i], [h_i] <-- RNN
+    outputs, states = lstm_encoder_target(inputs_list, start_state, "LSTM")
+
+    lstm_encoder_tweet = Encoder(rnn_cell.BasicLSTMCell, input_size + 2 * hidden_size, hidden_size, drop_prob,
+                                 drop_prob)
+
+    inputs_cond_list = [tf.concat(1, [tf.squeeze(x), states[-1]]) for x in
+                        tf.split(1, max_seq_length, embedded_inputs_cond)]
+
+    # running a second LSTM conditioned on the last state of the first
+    outputs_cond, states_cond = lstm_encoder_tweet(inputs_cond_list, states[-1],
+                                                   "LSTMcond")
+
+    outputs_fin = outputs_cond[-1]
+
+    # outputs_fin = tf.Print(outputs_fin, [tf.shape(states[-1]), tf.shape(inputs_cond_list[0])])
+
+
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax, bias=True)(outputs_fin)  # tf.nn.softmax
+
+    return model, [inputs, inputs_cond]
+
+
+
+def get_model_experimental_sepembed(batch_size, max_seq_length, input_size, hidden_size, target_size,
+                               vocab_size, pretrain, tanhOrSoftmax, dropout):
+
+
+    # batch_size x max_seq_length
+    inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
+    inputs_cond = tf.placeholder(tf.int32, [batch_size, max_seq_length])
+
+    cont_train = True
+    if pretrain == "pre":  # continue training embeddings or not. Currently works better to continue training them.
+        cont_train = False
+    embedding_matrix = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),  # input_size is embeddings size
+                               name="embedding_matrix", trainable=cont_train)
+    embedding_matrix_cond = tf.Variable(tf.random_uniform([vocab_size, input_size], -0.1, 0.1),
+                                name="embedding_matrix", trainable=cont_train)
+
+
+    # batch_size x max_seq_length x input_size
+    embedded_inputs = tf.nn.embedding_lookup(embedding_matrix, inputs)
+    embedded_inputs_cond = tf.nn.embedding_lookup(embedding_matrix_cond, inputs_cond)
+
+
+    # [batch_size x inputs_size] with max_seq_length elements
+    # fixme: possibly inefficient
+    # inputs_list[0]: batch_size x input[0] <-- word vector of the first word
+    inputs_list = [tf.squeeze(x) for x in
+               tf.split(1, max_seq_length, embedded_inputs)]
+    inputs_cond_list = [tf.squeeze(x) for x in
+                    tf.split(1, max_seq_length, embedded_inputs_cond)]
+
+    drop_prob = None
+    if dropout:
+        drop_prob = 0.1
+    lstm_encoder = Encoder(rnn_cell.BasicLSTMCell, input_size, hidden_size, drop_prob, drop_prob)
+
+    start_state = tf.zeros([batch_size, lstm_encoder.state_size])
+
+    ### FORWARD
+
+    # [h_i], [h_i, c_i] <-- LSTM
+    # [h_i], [h_i] <-- RNN
+    fw_outputs, fw_states = lstm_encoder(inputs_list, start_state, "LSTM")
+
+    # running a second LSTM conditioned on the last state of the first
+    fw_outputs_cond, fw_states_cond = lstm_encoder(inputs_cond_list, fw_states[-1],
+                                               "LSTMcond")
+
+    fw_outputs_fin = fw_outputs_cond[-1]
+
+    ### BACKWARD
+    bw_outputs, bw_states = lstm_encoder(inputs_list[::-1], start_state, "LSTM_bw")
+    bw_outputs_cond, bw_states_cond = lstm_encoder(inputs_cond_list[::-1], bw_states[-1],
+                                               "LSTMcond_bw")
+    bw_outputs_fin = bw_outputs_cond[-1]
+
+    outputs_fin = tf.concat(1, [fw_outputs_fin, bw_outputs_fin])
+
+    # outputs_fin = fw_outputs_fin
+
+    # outputs_fin = tf.Print(outputs_fin, [tf.shape(outputs_fin), tf.shape(fw_outputs_fin)])
+
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax, bias=True)(outputs_fin)  # tf.nn.softmax
+
+    return model, [inputs, inputs_cond]
+
+
+
 def get_model_conditional_bidirectional(batch_size, max_seq_length, input_size, hidden_size, target_size,
                               vocab_size, pretrain, tanhOrSoftmax):
     """
@@ -435,6 +629,10 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
         model, placeholders = get_model_conditional_target_feed(batch_size, max_seq_length, input_size, hidden_size,
                                                                 target_size,
                                                                 vocab_size, pretrain, tanhOrSoftmax, dropout)
+    elif modeltype == "experimental-sepembed":
+        model, placeholders = get_model_experimental_sepembed(batch_size, max_seq_length, input_size, hidden_size,
+                                                              target_size,
+                                                              vocab_size, pretrain, tanhOrSoftmax, dropout)
 
     ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
@@ -690,7 +888,7 @@ if __name__ == '__main__':
         # code for testing different combinations below
         hidden_size = [60]#[50, 55, 60]
         acc_tresh = [1.0] #[0.93, 0.94, 0.96, 0.98, 0.99]
-        modeltype = ["experimental", "conditional-target-feed"]#"conditional-reverse", "conditional", "aggregated", "tweetonly"]
+        modeltype = ["experimental-sepembed"]#, "conditional-target-feed"]#"conditional-reverse", "conditional", "aggregated", "tweetonly"]
         word2vecmodel = ["small"]#, "big"]
         stopwords = ["most"]#, "punctonly"]
         dropout = ["true"]#, "false"]#, "false"]#, "false"]
@@ -705,7 +903,7 @@ if __name__ == '__main__':
                             for at in acc_tresh:
                                 for hid in hidden_size:
                                     for pre in pretrain:
-                                        outfile = "../out/results_allexp-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
+                                        outfile = "../out/results_allexp2-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
                                         print(outfile)
 
                                         if EVALONLY == False:
