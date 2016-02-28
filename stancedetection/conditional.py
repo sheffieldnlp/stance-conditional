@@ -17,6 +17,8 @@ import os
 from tensorflow.models.rnn import rnn, rnn_cell
 import conditional_tim
 import numpy.ma as ma
+from conditional_tim import get_model_experimental, get_model_conditional_target_feed
+
 
 class SemEvalHook(Hook):
     """
@@ -426,6 +428,13 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     elif modeltype == "conditional-bi":
         model, placeholders =  get_model_conditional_bidirectional(batch_size, max_seq_length, input_size,
                                             hidden_size, target_size, vocab_size, pretrain, tanhOrSoftmax)
+    elif modeltype == "experimental":
+        model, placeholders = get_model_experimental(batch_size, max_seq_length, input_size, hidden_size, target_size,
+                                                     vocab_size, pretrain, tanhOrSoftmax, dropout)
+    elif modeltype == "conditional-target-feed":
+        model, placeholders = get_model_conditional_target_feed(batch_size, max_seq_length, input_size, hidden_size,
+                                                                target_size,
+                                                                vocab_size, pretrain, tanhOrSoftmax, dropout)
 
     ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
@@ -680,8 +689,8 @@ if __name__ == '__main__':
 
         # code for testing different combinations below
         hidden_size = [60]#[50, 55, 60]
-        acc_tresh = [0.98] #[0.93, 0.94, 0.96, 0.98, 0.99]
-        modeltype = ["aggregated"]#"conditional-reverse", "conditional", "aggregated", "tweetonly"]
+        acc_tresh = [1.0] #[0.93, 0.94, 0.96, 0.98, 0.99]
+        modeltype = ["experimental", "conditional-target-feed"]#"conditional-reverse", "conditional", "aggregated", "tweetonly"]
         word2vecmodel = ["small"]#, "big"]
         stopwords = ["most"]#, "punctonly"]
         dropout = ["true"]#, "false"]#, "false"]#, "false"]
@@ -696,7 +705,7 @@ if __name__ == '__main__':
                             for at in acc_tresh:
                                 for hid in hidden_size:
                                     for pre in pretrain:
-                                        outfile = "../out/results_all2-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + "stop-most_" + pre + "_accthresh" + str(at) + "_" + str(i) + ".txt"
+                                        outfile = "../out/results_allexp-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
                                         print(outfile)
 
                                         if EVALONLY == False:
