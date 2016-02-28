@@ -1,0 +1,59 @@
+import io
+from readwrite import reader, writer
+from preprocess import tokenise_tweets
+import preprocess
+
+def selectTrainData(tweets, targets):
+    inv_topics = {v: k for k, v in preprocess.TOPICS_LONG.items()}
+    inlist = []
+    outcnt = 0
+    for i, tweet in enumerate(tweets):
+        target_keywords = preprocess.KEYWORDS.get(inv_topics.get(targets[i]))
+        target_in_tweet = 0
+        for key in target_keywords:
+            if key.lower() in tweet.lower():
+                target_in_tweet = 1
+                break
+        if target_in_tweet == 1:
+            inlist.append(i)
+        else:
+            outcnt += 1
+    print("Incnt", len(inlist), "Outcnt", outcnt)
+    return inlist
+
+
+def printInOutFiles(inlist, infile, outfileIn, outfileOut):
+    outfIn = open(outfileIn, 'w')
+    outfOut = open(outfileOut, 'w')
+    cntr = 0
+    for line in io.open(infile, encoding='windows-1252', mode='r'):  # for the Trump file it's utf-8
+        if line.startswith('ID\t'):
+            outfIn.write(line)
+            outfOut.write(line)
+        else:
+            if cntr in inlist:
+                outfIn.write(line)
+            else:
+                outfOut.write(line)
+            cntr += 1
+
+    outfIn.close()
+    outfOut.close()
+
+
+if __name__ == '__main__':
+    testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
+    devdata = "../data/semEval2016-task6-trialdata_new.txt"
+
+    tweets_gold, targets_gold, labels_gold, ids_gold = reader.readTweetsOfficial(testdata, 'windows-1252', 2)
+    tweets_res, targets_res, labels_res, ids_res = reader.readTweetsOfficial("../out/results_subtaskB_most_test1.txt", 'windows-1252', 2)
+
+    inlist = selectTrainData(tweets_gold, targets_gold)
+    printInOutFiles(inlist, "../out/results_subtaskB_most_test1.txt", "out_trump_inTwe.txt", "out_trump_outTwe.txt")
+    printInOutFiles(inlist, testdata, "_gold_trump_inTwe.txt", "_gold_trump_outTwe.txt")
+
+    print("Inlist")
+    writer.eval("_gold_trump_inTwe.txt", "out_trump_inTwe.txt")
+
+    print("Outlist")
+    writer.eval("_gold_trump_outTwe.txt", "out_trump_outTwe.txt")
