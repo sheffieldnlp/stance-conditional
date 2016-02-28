@@ -382,7 +382,7 @@ def get_model_conditional_bidirectional(batch_size, max_seq_length, input_size, 
 
 
 
-def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, hidden_size, max_epochs, tanhOrSoftmax, dropout, reversecondidional=False, modeltype="conditional", targetInTweet={}, testid = "test-1", pretrain = "pre_cont", ignorelossneut=False, acc_thresh=0.9):
+def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, hidden_size, max_epochs, tanhOrSoftmax, dropout, modeltype="conditional", targetInTweet={}, testid = "test-1", pretrain = "pre_cont", ignorelossneut=False, acc_thresh=0.9):
     # TO DO: add l2 regularisation and dropout
 
     # parameters
@@ -402,10 +402,11 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     target_size = 3
     max_seq_length = len(tweets[0])
     #vocab_size = len(dictionary)
-    if reversecondidional == False:
-        data = [np.asarray(tweets), np.asarray(targets), np.asarray(ids), np.asarray(labels)]
-    else:
+    if modeltype == "conditional-reverse":
         data = [np.asarray(targets), np.asarray(tweets), np.asarray(ids), np.asarray(labels)]
+    else:
+        data = [np.asarray(tweets), np.asarray(targets), np.asarray(ids), np.asarray(labels)]
+
     print("Number training examples:", len(tweets))
 
     X = w2vmodel.syn0
@@ -418,7 +419,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
         model, placeholders = get_model_tweetonly(batch_size, max_seq_length, input_size,
                                              hidden_size, target_size, vocab_size, pretrain, tanhOrSoftmax, dropout)
         data = [np.asarray(tweets), np.asarray(ids), np.asarray(labels)]
-    elif modeltype == "conditional":
+    elif modeltype == "conditional" or modeltype == "conditional-reverse":
         # output of get_model(): model, [inputs, inputs_cond]
         model, placeholders = get_model_conditional(batch_size, max_seq_length, input_size,
                                             hidden_size, target_size, vocab_size, pretrain, tanhOrSoftmax, dropout)
@@ -457,7 +458,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                  np.lib.pad(np.asarray(ids_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                  np.lib.pad(np.asarray(labels_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0))
                  ]
-    elif reversecondidional == True:
+    elif modeltype == "conditional-reverse":
         data_test = [np.lib.pad(np.asarray(targets_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                      np.lib.pad(np.asarray(tweets_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
                      np.lib.pad(np.asarray(ids_test), ((0, pad_nr), (0, 0)), 'constant', constant_values=(0)),
@@ -553,7 +554,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
 
 
-def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", reversecondidional=False, postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, ignorelossneut=False, acc_thresh=0.9):
+def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, ignorelossneut=False, acc_thresh=0.9, pretrain="pre_cont"):
     """
     Reading input files, calling the trainer for training the model, evaluate with official script
     :param outfile: name for output file
@@ -629,8 +630,8 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftma
 
     predictions_all, predictions_detailed_all, ids_all = test_trainer(testSetting, w2vmodel, transformed_tweets, transformed_targets, transformed_labels, ids, transformed_tweets_test,
                                                                       transformed_targets_test, transformed_labels_test, ids_test, hidden_size, max_epochs,
-                                                                      tanhOrSoftmax, dropout, reversecondidional, modeltype, targetInTweet,
-                                                                      testid, ignorelossneut=ignorelossneut, acc_thresh=acc_thresh)
+                                                                      tanhOrSoftmax, dropout, modeltype, targetInTweet,
+                                                                      testid, ignorelossneut=ignorelossneut, acc_thresh=acc_thresh, pretrain=pretrain)
 
 
 
@@ -656,6 +657,7 @@ if __name__ == '__main__':
     tf.set_random_seed(1337)
 
     SINGLE_RUN = False
+    EVALONLY = False
 
     if SINGLE_RUN:
         #outfile = "../out/results_subtaskB_bi.txt"
@@ -679,11 +681,12 @@ if __name__ == '__main__':
         # code for testing different combinations below
         hidden_size = [60]#[50, 55, 60]
         acc_tresh = [0.98] #[0.93, 0.94, 0.96, 0.98, 0.99]
-        modeltype = ["conditional", "aggregated", "tweetonly"]#["conditional", "aggregated", "tweetonly"]
+        modeltype = ["aggregated"]#"conditional-reverse", "conditional", "aggregated", "tweetonly"]
         word2vecmodel = ["small"]#, "big"]
         stopwords = ["most"]#, "punctonly"]
         dropout = ["true"]#, "false"]#, "false"]#, "false"]
-        testsetting = ["true"]#, "false"]
+        testsetting = ["false"]#, "true"]#, "false"]
+        pretrain = ["pre_cont"]#""false", "pre", "pre_cont"]
 
         for i in range(10):
             for modelt in modeltype:
@@ -692,9 +695,12 @@ if __name__ == '__main__':
                         for tests in testsetting:
                             for at in acc_tresh:
                                 for hid in hidden_size:
-                                    outfile = "../out/results_testfin-1e-3_test-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + "stop-most" + "_accthresh" + str(at) + "_" + str(i) + ".txt"
-                                    print(outfile)
-                                    #readResfilesAndEval(tests, outfile)
+                                    for pre in pretrain:
+                                        outfile = "../out/results_all2-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + "stop-most_" + pre + "_accthresh" + str(at) + "_" + str(i) + ".txt"
+                                        print(outfile)
 
-                                    readInputAndEval(tests, outfile, hid, 51, "tanh", drop, "most", str(i), modelt, acc_thresh=at, word2vecmodel=w2v)
-                                    tf.ops.reset_default_graph()
+                                        if EVALONLY == False:
+                                            readInputAndEval(tests, outfile, hid, 51, "tanh", drop, "most", str(i), modelt, acc_thresh=at, word2vecmodel=w2v, pretrain=pre)
+                                            tf.ops.reset_default_graph()
+                                        else:
+                                            readResfilesAndEval(tests, outfile)
