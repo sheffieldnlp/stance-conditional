@@ -45,15 +45,18 @@ if __name__ == '__main__':
     testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
     devdata = "../data/semEval2016-task6-trialdata_new.txt"
 
-    tweets_gold, targets_gold, labels_gold, ids_gold = reader.readTweetsOfficial(testdata, 'windows-1252', 2)
-    tweets_res, targets_res, labels_res, ids_res = reader.readTweetsOfficial("../out/results_subtaskB_most_test1.txt", 'windows-1252', 2)
+    testbest = "../out/results_subtaskB_most_test1.txt"
+    devbest = "../out/results_all-1e-3-false_conditional-reverse_w2vsmall_hidd60_droptrue_stop-most_pre_cont_accthresh0.98_2.txt"
+
+    tweets_gold, targets_gold, labels_gold, ids_gold = reader.readTweetsOfficial(devdata, 'windows-1252', 2)
+    tweets_res, targets_res, labels_res, ids_res = reader.readTweetsOfficial(devbest, 'windows-1252', 2)
 
     inlist = selectTrainData(tweets_gold, targets_gold)
-    printInOutFiles(inlist, "../out/results_subtaskB_most_test1.txt", "out_trump_inTwe.txt", "out_trump_outTwe.txt")
-    printInOutFiles(inlist, testdata, "_gold_trump_inTwe.txt", "_gold_trump_outTwe.txt")
+    printInOutFiles(inlist, devbest, "out_clinton_inTwe.txt", "out_clinton_outTwe.txt")
+    printInOutFiles(inlist, devdata, "_gold_clinton_inTwe.txt", "_gold_clinton_outTwe.txt")
 
     print("Inlist")
-    writer.eval("_gold_trump_inTwe.txt", "out_trump_inTwe.txt")
+    writer.eval("_gold_clinton_inTwe.txt", "out_clinton_inTwe.txt")
 
     print("Outlist")
-    writer.eval("_gold_trump_outTwe.txt", "out_trump_outTwe.txt")
+    writer.eval("_gold_clinton_outTwe.txt", "out_clinton_outTwe.txt")
