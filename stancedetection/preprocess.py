@@ -7,7 +7,7 @@ from twokenize_wrapper import tokenize
 import numpy as np
 
 KEYWORDS = {'clinton': ['hillary', 'clinton'],
-            'trump': ['donald trump', 'trump'],
+            'trump': ['donald trump', 'trump', 'donald'],
             'climate': 'climate',
             'feminism': ['feminism', 'feminist'],
             'abortion': ['abortion', 'aborting'],
@@ -22,8 +22,34 @@ TOPICS_LONG = {'clinton': 'Hillary Clinton',
                'atheism': 'Atheism'
                }
 
+TOPICS_LONG_REVERSE = dict(zip(TOPICS_LONG.values(), TOPICS_LONG.keys()))
 
-def istargetInTweet(devdata, target_short):
+
+def istargetInTweet(devdata, target_list):
+    """
+    Check if target is contained in tweet
+    :param devdata: development data as a dictionary (keys: targets, values: tweets)
+    :param target_short: short version of target, e.g. 'trump', 'clinton'
+    :param id: tweet number
+    :return: true if target contained in tweet, false if not
+    """
+    cntr = 0
+    ret_dict = {}
+    for id in devdata.keys():
+
+        tweet = devdata.get(id)
+        target_keywords = KEYWORDS.get(TOPICS_LONG_REVERSE.get(target_list[0]))
+        target_in_tweet = False
+        for key in target_keywords:
+            if key.lower() in tweet.lower():
+                target_in_tweet = True
+                break
+        ret_dict[id] = target_in_tweet
+        cntr += 1
+    return ret_dict
+
+
+def istargetInTweetSing(devdata, target_short):
     """
     Check if target is contained in tweet
     :param devdata: development data as a dictionary (keys: targets, values: tweets)
@@ -177,12 +203,18 @@ def transform_labels(labels, dim=3):
     labels_t = []
     for lab in labels:
         v = np.zeros(dim)
-        if lab == 'NONE':
-            ix = 0
-        elif lab == 'AGAINST':
-            ix = 1
-        elif lab == 'FAVOR':
-            ix = 2
+        if dim == 3:
+            if lab == 'NONE':
+                ix = 0
+            elif lab == 'AGAINST':
+                ix = 1
+            elif lab == 'FAVOR':
+                ix = 2
+        else:
+            if lab == 'AGAINST':
+                ix = 0
+            elif lab == 'FAVOR':
+                ix = 1
         v[ix] = 1
         labels_t.append(v)
     return labels_t

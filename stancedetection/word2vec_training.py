@@ -12,16 +12,20 @@ def trainPhrasesModel(tweets):
     """
     print("Learning multiword expressions")
     bigram = Phrases(tweets)
-    bigram.save("../out/phrase_all.model")
+    bigram.save("../out/phrase_bigram.model")
+
+    trigram = Phrases(bigram[tweets])
+    trigram.save("../out/phrase_trigram.model")
 
     print("Sanity checking multiword expressions")
     test = "i like donald trump and hate muslims , go hillary clinton , i like jesus , jesus , legalisation abortion "
     sent = test.split(" ")
-    print(bigram[sent])
-    return bigram[tweets]
+    print(trigram[sent])
+    return trigram[tweets]
 
-def trainWord2VecModel(tweets, modelname):
-    #tweets = trainPhrasesModel(tweets)
+def trainWord2VecModel(tweets, modelname, usePhrases=False):
+    if usePhrases == True:
+        tweets = trainPhrasesModel(tweets)
 
     print("Starting word2vec training")
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -67,13 +71,13 @@ def applyWord2VecMostSimilar(modelname="../data/skip_nostop_multi_100features_10
 if __name__ == '__main__':
     unk_tokens = [["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"]]
     tweets, targets, labels, ids = reader.readTweetsOfficial("../data/semeval2016-task6-train+dev.txt")
-    tweet_tokens = tokenise_tweets(tweets)
-    tweets_trump, targets_trump, labels_trump, ids_trump = reader.readTweetsOfficial("../data/downloaded_Donald_Trump.txt", "utf-8", 1)
-    tweet_tokens_trump = tokenise_tweets(tweets_trump)
+    tweet_tokens = tokenise_tweets(tweets, stopwords="most")
+    tweets_trump, targets_trump, labels_trump, ids_trump = reader.readTweetsOfficial("../data/downloaded_Donald_Trump_all.txt", "utf-8", 1)
+    tweet_tokens_trump = tokenise_tweets(tweets_trump, stopwords="most")
 
-    tweets_unlabelled = reader.readTweets("../data/additionalTweetsStanceDetectionBig.json")#("../data/additionalTweetsStanceDetection.json")
-    tweet_tokens_unlabelled = tokenise_tweets(tweets_unlabelled)
+    tweets_unlabelled = reader.readTweets("../data/additionalTweetsStanceDetection.json")#("../data/additionalTweetsStanceDetection.json")
+    tweet_tokens_unlabelled = tokenise_tweets(tweets_unlabelled, stopwords="most")
 
-    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_single_100features_5minwords_5context_big")#("300features_40minwords_10context")
+    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_tri_100features_5minwords_5context_big", usePhrases=True)#("300features_40minwords_10context")
 
-    applyWord2VecMostSimilar("../out/skip_nostop_single_100features_5minwords_5context_big")
+    applyWord2VecMostSimilar("../out/skip_nostop_tri_100features_5minwords_5context_big")
