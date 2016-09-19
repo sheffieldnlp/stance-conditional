@@ -6,26 +6,22 @@ import numpy as np
 
 def trainPhrasesModel(tweets):
     """
-    Train phrases model, this was used for bag of word baseline, but not necessary if we use LSTMs
+    Train phrases model, experimental, not used
     :param tweets: list of tokenised tweets
     :return:
     """
     print("Learning multiword expressions")
     bigram = Phrases(tweets)
-    bigram.save("../out/phrase_bigram.model")
-
-    trigram = Phrases(bigram[tweets])
-    trigram.save("../out/phrase_trigram.model")
+    bigram.save("../out/phrase_all.model")
 
     print("Sanity checking multiword expressions")
-    test = "i like donald trump and hate muslims , go hillary clinton , i like jesus , jesus , legalisation abortion "
+    test = "i like donald trump , go hillary clinton , i like jesus , jesus , legalisation abortion "
     sent = test.split(" ")
-    print(trigram[sent])
-    return trigram[tweets]
+    print(bigram[sent])
+    return bigram[tweets]
 
-def trainWord2VecModel(tweets, modelname, usePhrases=False):
-    if usePhrases == True:
-        tweets = trainPhrasesModel(tweets)
+def trainWord2VecModel(tweets, modelname):
+    #tweets = trainPhrasesModel(tweets)
 
     print("Starting word2vec training")
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
@@ -51,16 +47,12 @@ def trainWord2VecModel(tweets, modelname, usePhrases=False):
 
 
 # find most similar n words to given word
-def applyWord2VecMostSimilar(modelname="../data/skip_nostop_multi_100features_10minwords_5context", word="#donaldtrump",
+def applyWord2VecMostSimilar(modelname="../data/skip_nostop_single_100features_10minwords_5context", word="#donaldtrump",
                                  top=10):
     model = word2vec.Word2Vec.load(modelname)
     print("Find ", top, " terms most similar to ", word, "...")
     for res in model.most_similar(word, topn=top):
         print(res)
-    #print(model.vocab["unk"].index)
-    #print(model.index2word[0])
-    #syn = np.concatenate(model.syn0, np.random.uniform(-0.25, 0.25, 91))
-    #print(np.random.uniform(-0.25, 0.25, 91))
     print("Finding terms containing ", word, "...")
     for v in model.vocab:
         if word in v:
@@ -72,12 +64,12 @@ if __name__ == '__main__':
     unk_tokens = [["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"], ["unk"]]
     tweets, targets, labels, ids = reader.readTweetsOfficial("../data/semeval2016-task6-train+dev.txt")
     tweet_tokens = tokenise_tweets(tweets, stopwords="most")
-    tweets_trump, targets_trump, labels_trump, ids_trump = reader.readTweetsOfficial("../data/downloaded_Donald_Trump_all.txt", "utf-8", 1)
+    tweets_trump, targets_trump, labels_trump, ids_trump = reader.readTweetsOfficial("../data/downloaded_Donald_Trump.txt", "utf-8", 1)
     tweet_tokens_trump = tokenise_tweets(tweets_trump, stopwords="most")
 
-    tweets_unlabelled = reader.readTweets("../data/additionalTweetsStanceDetection.json")#("../data/additionalTweetsStanceDetection.json")
+    tweets_unlabelled = reader.readTweets("../data/additionalTweetsStanceDetection.json")
     tweet_tokens_unlabelled = tokenise_tweets(tweets_unlabelled, stopwords="most")
 
-    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_tri_100features_5minwords_5context_big", usePhrases=True)#("300features_40minwords_10context")
+    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_single_100features_5minwords_5context")
 
-    applyWord2VecMostSimilar("../out/skip_nostop_tri_100features_5minwords_5context_big")
+    applyWord2VecMostSimilar("../out/skip_nostop_single_100features_5minwords_5context")

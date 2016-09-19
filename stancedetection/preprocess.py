@@ -1,5 +1,3 @@
-__author__ = 'Isabelle Augenstein'
-
 from nltk.corpus import stopwords
 import collections
 from readwrite import reader

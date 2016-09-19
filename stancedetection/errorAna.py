@@ -1,6 +1,5 @@
 import io
 from readwrite import reader, writer
-from preprocess import tokenise_tweets
 import preprocess
 
 def selectTrainData(tweets, targets):
@@ -44,24 +43,23 @@ def printInOutFiles(inlist, infile, outfileIn, outfileOut):
 if __name__ == '__main__':
     testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
     devdata = "../data/semEval2016-task6-trialdata_new.txt"
+    traindata = "../data/semeval2016-task6-train+dev.txt"
 
-    testbest = "../out/results_subtaskB_most_test1.txt"
-    #devbest = "../out/results_all-1e-3-false_conditional-reverse_w2vsmall_hidd60_droptrue_stop-most_pre_cont_accthresh0.98_2.txt"
-    devbest = "../out/results_allexp-1e-3-false_experimental_w2vsmall_hidd60_droptrue_pre_cont_2.txt"
-
+    devbest = "../out/results_all-1e-3-false_conditional-reverse_w2vsmall_hidd60_droptrue_stop-most_pre_cont_accthresh0.98_2.txt"
 
     tweets_gold, targets_gold, labels_gold, ids_gold = reader.readTweetsOfficial(devdata, 'windows-1252', 2)
-    tweets_res, targets_res, labels_res, ids_res = reader.readTweetsOfficial(devbest, 'windows-1252', 2)
+    tweets_res, targets_res, labels_res, ids_res = reader.readTweetsOfficial(devdata, 'windows-1252', 2)
 
     inlist = selectTrainData(tweets_gold, targets_gold)
-    printInOutFiles(inlist, devbest, "out_clinton_inTwe.txt", "out_clinton_outTwe.txt")
-    printInOutFiles(inlist, devdata, "_gold_clinton_inTwe.txt", "_gold_clinton_outTwe.txt")
+
+    printInOutFiles(inlist, devbest, "out_dev_inTwe_cond.txt", "out_dev_outTwe_cond.txt")
+    printInOutFiles(inlist, devdata, "_gold_dev_inTwe.txt", "_gold_dev_outTwe.txt")
 
     print("All")
     writer.eval(devdata, devbest)
 
     print("Inlist")
-    writer.eval("_gold_clinton_inTwe.txt", "out_clinton_inTwe.txt")
+    writer.eval("_gold_dev_inTwe.txt", "out_dev_inTwe_cond.txt")
 
     print("Outlist")
-    writer.eval("_gold_clinton_outTwe.txt", "out_clinton_outTwe.txt")
+    writer.eval("_gold_dev_outTwe.txt", "out_dev_outTwe_cond.txt")

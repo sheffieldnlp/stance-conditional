@@ -1,193 +1,24 @@
-import sys
-sys.path.append('/Users/Isabelle/stance-conditional/')
-
-
 import tensorflow as tf
 import numpy as np
 
-from tfrnn.rnn import Encoder, Projector, rnn_cell
-from tfrnn.hooks import SaveModelHook, AccuracyHook, LossHook, SpeedHook, TraceHook
-from tfrnn.batcher import BatchBucketSampler
-from tfrnn.util import sample_one_hot, debug_node, load_model
-from tfrnn.hooks import LoadModelHook
-import tfrnn.hooks
+from stancedetection.rnn import Encoder, Projector, Hook, AccuracyHook, LossHook, SpeedHook, BatchBucketSampler, TraceHook, SaveModelHookDev
+from stancedetection.rnn import Trainer, SemEvalHook, AccuracyHookIgnoreNeutral, load_model_dev
 from readwrite import reader, writer
 from preprocess import tokenise_tweets, transform_targets, transform_tweet, transform_labels, istargetInTweet
-#from tensorflow.models.embedding import word2vec
 from gensim.models import word2vec, Phrases
-from sklearn.metrics import classification_report
-from tfrnn.hooks import Hook
 import os
-from tensorflow.models.rnn import rnn, rnn_cell
-import conditional_tim
+from tensorflow.models.rnn import rnn_cell
 import numpy.ma as ma
-#from conditional_tim import get_model_experimental, get_model_conditional_target_feed
-
-
-class SemEvalHook(Hook):
-    """
-    Evaluting P/R/F on dev data while training
-    """
-
-    #PRF1_TRACE_TAG = "PRF1"
-
-    def __init__(self, batcher, placeholders, at_every_epoch):
-        self.batcher = batcher
-        self.placeholders = placeholders
-        self.at_every_epoch = at_every_epoch
-
-    def __call__(self, sess, epoch, iteration, model, loss):
-        if iteration == 0 and epoch % self.at_every_epoch == 0:
-            total = 0
-            correct = 0
-            truth_all = []
-            pred_all = []
-            for values in self.batcher:
-                total += len(values[-1])
-                feed_dict = {}
-                for i in range(0, len(self.placeholders)):
-                    feed_dict[self.placeholders[i]] = values[i]
-                truth = np.argmax(values[-1], 1)  # values[2], batch sampled from data[2], is a 3-legth one-hot vector containing the labels. this is to transform those back into integers
-                predicted = sess.run(tf.arg_max(tf.nn.softmax(model), 1),
-                                     feed_dict=feed_dict)
-                correct += sum(truth == predicted)
-                truth_all.extend(truth)
-                pred_all.extend(predicted)
-            #report = classification_report(truth_all, pred_all, digits=4)
-            #self.update_summary(sess, iteration, self.PRF1_TRACE_TAG, report)
-            print(classification_report(truth_all, pred_all, digits=4)) # target_names=["NEUTRAL", "AGAINST", "FAVOR"],
-
-
-
-
-class AccuracyHookIgnoreNeutral(TraceHook):
-    def __init__(self, summary_writer, batcher, placeholders, at_every_epoch):
-        super().__init__(summary_writer)
-        self.batcher = batcher
-        self.placeholders = placeholders
-        self.at_every_epoch = at_every_epoch
-
-    def __call__(self, sess, epoch, iteration, model, loss):
-        if iteration == 0 and epoch % self.at_every_epoch == 0:
-            total = 0
-            total_old = 0
-            correct_old = 0
-            correct = 0
-            for values in self.batcher:
-                total_old += len(values[-1])
-                feed_dict = {}
-                for i in range(0, len(self.placeholders)):
-                    feed_dict[self.placeholders[i]] = values[i]
-                truth = np.argmax(values[-1], 1)
-
-                # mask truth
-                truth_noneutral = ma.masked_values(truth, 0)
-                truth_noneutral_compr = truth_noneutral.compressed()
-
-                predicted = sess.run(tf.arg_max(tf.nn.softmax(model), 1),
-                                     feed_dict=feed_dict)
-
-                pred_nonneutral = ma.array(predicted, mask=truth_noneutral.mask)
-                pred_nonneutral_compr = pred_nonneutral.compressed()
-
-                correct_old += sum(truth == predicted)
-                correct += sum(truth_noneutral_compr == pred_nonneutral_compr)
-                total += len(truth_noneutral_compr)
-
-            acc = float(correct) / total
-            self.update_summary(sess, iteration, "AccurayNonNeut", acc)
-            print("Epoch " + str(epoch) +
-                  "\tAccNonNeut " + str(acc) +
-                  "\tCorrect " + str(correct) + "\tTotal " + str(total))
-            return acc
-        return 0.0
-
-
-class SaveModelHookDev(Hook):
-    def __init__(self, path, at_every_epoch=5):
-        self.path = path
-        self.at_every_epoch = at_every_epoch
-        self.saver = tf.train.Saver(tf.trainable_variables())
-
-    def __call__(self, sess, epoch, iteration, model, loss):
-        if epoch%self.at_every_epoch == 0:
-            #print("Saving model...")
-            SaveModelHookDev.save_model_dev(self.saver, sess, self.path + "_ep" + str(epoch) + "/", "model.tf")
-
-    def save_model_dev(saver, sess, path, modelname):
-        if not os.path.exists(path):
-            os.makedirs(path)
-        saver.save(sess, os.path.join(path, modelname))
-
-
-class Trainer(object):
-    """
-    Object representing a TensorFlow trainer.
-    """
-
-    def __init__(self, optimizer, max_epochs, hooks):
-        self.loss = None
-        self.optimizer = optimizer
-        self.max_epochs = max_epochs
-        self.hooks = hooks
-
-    def __call__(self, batcher, placeholders, loss, acc_thresh, pretrain, embedd, model=None, session=None):
-        self.loss = loss
-        minimization_op = self.optimizer.minimize(loss)
-        close_session_after_training = False
-        if session is None:
-            session = tf.Session()
-            close_session_after_training = True  # no session existed before, we provide a temporary session
-
-        init = tf.initialize_all_variables()
-
-        if pretrain == "pre" or pretrain == "pre_cont": # hack if we want to use pre-trained embeddings
-            vars = tf.all_variables()
-            emb_var = vars[0]
-            session.run(emb_var.assign(embedd))
-
-        session.run(init)
-        epoch = 1
-        while epoch < self.max_epochs:
-            iteration = 1
-            for values in batcher:
-                iteration += 1
-                feed_dict = {}
-                for i in range(0, len(placeholders)):
-                    feed_dict[placeholders[i]] = values[i]
-                with tf.device("/cpu:0"):
-                    _, current_loss = session.run([minimization_op, loss], feed_dict=feed_dict)
-                current_loss = sum(current_loss)
-                for hook in self.hooks:
-                    hook(session, epoch, iteration, model, current_loss)
-
-            # calling post-epoch hooks
-            for hook in self.hooks:
-
-                if isinstance(hook, AccuracyHookIgnoreNeutral):
-                    acc = hook(session, epoch, 0, model, 0)
-                    if acc > acc_thresh:
-                        print("Accuracy threshold reached! Stopping training.")
-                        if close_session_after_training:
-                            session.close()
-                        return epoch
-                else:
-                    hook(session, epoch, 0, model, 0)
-            epoch += 1
-
-        if close_session_after_training:
-            session.close()
-
-        return self.max_epochs-1
-
-
-def load_model_dev(sess, path, modelname):
-    saver = tf.train.Saver(tf.trainable_variables())
-    saver.restore(sess, os.path.join(path, modelname))
 
 
 def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, target_size,
-                          vocab_size, pretrain, dropout):
+                          vocab_size, pretrain, tanhOrSoftmax, dropout):
+    """
+    Unidirectional conditional encoding model
+    :param pretrain:  "pre": use pretrained word embeddings, "pre-cont": use pre-trained embeddings and continue training them, otherwise: random initialisation
+    """
+
+
 
     # batch_size x max_seq_length
     inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
@@ -227,14 +58,21 @@ def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, t
                                              "LSTMcond")
 
     outputs_fin = outputs_cond[-1]
-    model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin) #tf.nn.softmax
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin) #tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax, bias=True)(outputs_fin)  # tf.nn.softmax
 
     return model, [inputs, inputs_cond]
 
 
 
-def get_model_aggr(batch_size, max_seq_length, input_size, hidden_size, target_size,
-                         vocab_size, pretrain, dropout):
+def get_model_concat(batch_size, max_seq_length, input_size, hidden_size, target_size,
+                     vocab_size, pretrain, tanhOrSoftmax, dropout):
+    """
+    LSTM over target and over tweet, concatenated
+    :param pretrain:  "pre": use pretrained word embeddings, "pre-cont": use pre-trained embeddings and continue training them, otherwise: random initialisation
+    """
 
     # batch_size x max_seq_length
     inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
@@ -273,7 +111,10 @@ def get_model_aggr(batch_size, max_seq_length, input_size, hidden_size, target_s
 
     outputs_fin = outputs[-1]
 
-    model = Projector(target_size, non_linearity=tf.nn.tanh)(outputs_fin) #tf.nn.softmax
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh)(outputs_fin) #tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax)(outputs_fin)  # tf.nn.softmax
 
 
     return model, [inputs, inputs_cond]
@@ -281,8 +122,11 @@ def get_model_aggr(batch_size, max_seq_length, input_size, hidden_size, target_s
 
 
 def get_model_tweetonly(batch_size, max_seq_length, input_size, hidden_size, target_size,
-                       vocab_size, pretrain, dropout):
-
+                       vocab_size, pretrain, tanhOrSoftmax, dropout):
+    """
+    LSTM over tweet only
+    :param pretrain:  "pre": use pretrained word embeddings, "pre-cont": use pre-trained embeddings and continue training them, otherwise: random initialisation
+    """
 
     # batch_size x max_seq_length
     inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
@@ -317,15 +161,22 @@ def get_model_tweetonly(batch_size, max_seq_length, input_size, hidden_size, tar
     lstm_encoder = Encoder(rnn_cell.BasicLSTMCell, input_size, hidden_size, drop_prob, drop_prob)
 
     outputs_fin = outputs[-1]
-    model = Projector(target_size, non_linearity=tf.nn.tanh)(outputs_fin) #tf.nn.softmax
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh)(outputs_fin) #tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax)(outputs_fin)  # tf.nn.softmax
+
 
     return model, [inputs]
 
 
 
-def get_model_experimental(batch_size, max_seq_length, input_size, hidden_size, target_size,
-                               vocab_size, pretrain, dropout):
-
+def get_model_bidirectional_conditioning(batch_size, max_seq_length, input_size, hidden_size, target_size,
+                                         vocab_size, pretrain, tanhOrSoftmax, dropout):
+    """
+    Bidirectional conditioning model
+    :param pretrain:  "pre": use pretrained word embeddings, "pre-cont": use pre-trained embeddings and continue training them, otherwise: random initialisation
+    """
 
     # batch_size x max_seq_length
     inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
@@ -376,18 +227,22 @@ def get_model_experimental(batch_size, max_seq_length, input_size, hidden_size, 
 
     outputs_fin = tf.concat(1, [fw_outputs_fin, bw_outputs_fin])
 
-    # outputs_fin = fw_outputs_fin
 
-    # outputs_fin = tf.Print(outputs_fin, [tf.shape(outputs_fin), tf.shape(fw_outputs_fin)])
-
-    model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax, bias=True)(outputs_fin)  # tf.nn.softmax
 
     return model, [inputs, inputs_cond]
 
 
 
 def get_model_conditional_target_feed(batch_size, max_seq_length, input_size, hidden_size, target_size,
-                                      vocab_size, pretrain, dropout):
+                                      vocab_size, pretrain, tanhOrSoftmax, dropout):
+    """
+    Experimental, feed target during tweet processing
+    :param pretrain:  "pre": use pretrained word embeddings, "pre-cont": use pre-trained embeddings and continue training them, otherwise: random initialisation
+    """
     # batch_size x max_seq_length
     inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
     inputs_cond = tf.placeholder(tf.int32, [batch_size, max_seq_length])
@@ -432,18 +287,22 @@ def get_model_conditional_target_feed(batch_size, max_seq_length, input_size, hi
 
     outputs_fin = outputs_cond[-1]
 
-    # outputs_fin = tf.Print(outputs_fin, [tf.shape(states[-1]), tf.shape(inputs_cond_list[0])])
 
-
-    model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax, bias=True)(outputs_fin)  # tf.nn.softmax
 
     return model, [inputs, inputs_cond]
 
 
 
-def get_model_experimental_sepembed(batch_size, max_seq_length, input_size, hidden_size, target_size,
-                               vocab_size, pretrain, dropout):
-
+def get_model_bicond_sepembed(batch_size, max_seq_length, input_size, hidden_size, target_size,
+                              vocab_size, pretrain, tanhOrSoftmax, dropout):
+    """
+    Bidirectional conditional encoding with separate embeddings matrices for tweets and targets lookup
+    :param pretrain:  "pre": use pretrained word embeddings, "pre-cont": use pre-trained embeddings and continue training them, otherwise: random initialisation
+    """
 
     # batch_size x max_seq_length
     inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
@@ -498,37 +357,54 @@ def get_model_experimental_sepembed(batch_size, max_seq_length, input_size, hidd
 
     outputs_fin = tf.concat(1, [fw_outputs_fin, bw_outputs_fin])
 
-    # outputs_fin = fw_outputs_fin
 
-    # outputs_fin = tf.Print(outputs_fin, [tf.shape(outputs_fin), tf.shape(fw_outputs_fin)])
-
-    model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    if tanhOrSoftmax == "tanh":
+        model = Projector(target_size, non_linearity=tf.nn.tanh, bias=True)(outputs_fin)  # tf.nn.softmax
+    else:
+        model = Projector(target_size, non_linearity=tf.nn.softmax, bias=True)(outputs_fin)  # tf.nn.softmax
 
     return model, [inputs, inputs_cond]
 
 
 
 
-def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, hidden_size, max_epochs, dropout, modeltype="conditional", targetInTweet={}, testid = "test-1", pretrain = "pre_cont", ignorelossneut=False, acc_thresh=0.9, testOnly=False, input_size = 100):
-    # TO DO: add l2 regularisation and dropout
+
+def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_test, targets_test, labels_test, ids_test, hidden_size, max_epochs, tanhOrSoftmax, dropout, modeltype="conditional", targetInTweet={}, testid = "test-1", pretrain = "pre_cont", acc_thresh=0.9, sep = False):
+    """
+    Method for creating the different models and training them
+    :param testsetting: "True" for SemEval test setting (Donald Trump), "False" for dev setting (Hillary Clinton)
+    :param w2vmodel: location of word2vec model
+    :param tweets: training tweets, read and converted in readInputAndEval()
+    :param targets: training targets, read and converted in readInputAndEval()
+    :param labels: training labels, read and converted in readInputAndEval()
+    :param ids: ids of training instances
+    :param tweets_test: testing tweets, read and converted in readInputAndEval()
+    :param targets_test: testing targets, read and converted in readInputAndEval()
+    :param labels_test: testing labels, read and converted in readInputAndEval()
+    :param ids_test: ids of testing instances
+    :param hidden_size: size of hidden layer
+    :param max_epochs: maximum number of training epochs
+    :param tanhOrSoftmax: tanh or softmax in projector
+    :param dropout: use dropout or not
+    :param modeltype: "concat", "tweetonly", "conditional", "conditional-reverse", "bicond", "conditional-target-feed", "bicond-sepembed"
+    :param targetInTweet: dictionary produced with id to targetInTweet mappings in readInputAndEval(), used for postprocessing
+    :param testid: id of test run
+    :param pretrain: "pre" (use pretrained word embeddings), "pre_cont" (use pretrained word embeddings and continue training them), "random" (random word embeddings initialisations)
+    :param acc_thresh: experimental, stop training at certain accuracy threshold (between 0 and 1)
+    :param sep: True for using separate embeddings matrices, false for one (default)
+    :return:
+    """
 
     # parameters
-    #num_samples = 5628
-    #max_epochs = 21  # 100
     learning_rate = 0.0001
-    batch_size = 102 #97 #102 for FM #101 for Clinton  # number training examples per training epoch
-    #input_size = 100 #100 #91
-    #hidden_size = 60  # making this smaller to avoid overfitting, example is 83
-    #pretrain = "pre_cont"  # nopre, pre, pre_cont  : nopre: embeddings are initialised randomly,
-                           # pre: word2vec model is loaded, pre_cont: word2vec is loaded and further trained
-    #aggregated = False
-    #tweetonly = False
-    outfolder = "_".join([testid, modeltype, testsetting, "hidden-" + str(hidden_size)])
+    batch_size = 97
+    input_size = 100
+
+    outfolder = "_".join([testid, modeltype, testsetting, "hidden-" + str(hidden_size), tanhOrSoftmax])
 
     # real data stance-semeval
-    target_size = 3#len(labels[0]) #3
+    target_size = 3
     max_seq_length = len(tweets[0])
-    #vocab_size = len(dictionary)
     if modeltype == "conditional-reverse":
         data = [np.asarray(targets), np.asarray(tweets), np.asarray(ids), np.asarray(labels)]
     else:
@@ -539,42 +415,35 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
     X = w2vmodel.syn0
     vocab_size = len(w2vmodel.vocab)
 
-    if modeltype == "aggregated":
-        model, placeholders = get_model_aggr(batch_size, max_seq_length, input_size,
-                                             hidden_size, target_size, vocab_size, pretrain, dropout)
+    if modeltype == "concat":
+        model, placeholders = get_model_concat(batch_size, max_seq_length, input_size,
+                                               hidden_size, target_size, vocab_size, pretrain, tanhOrSoftmax, dropout)
     elif modeltype == "tweetonly":
         model, placeholders = get_model_tweetonly(batch_size, max_seq_length, input_size,
-                                             hidden_size, target_size, vocab_size, pretrain, dropout)
+                                             hidden_size, target_size, vocab_size, pretrain, tanhOrSoftmax, dropout)
         data = [np.asarray(tweets), np.asarray(ids), np.asarray(labels)]
     elif modeltype == "conditional" or modeltype == "conditional-reverse":
         # output of get_model(): model, [inputs, inputs_cond]
         model, placeholders = get_model_conditional(batch_size, max_seq_length, input_size,
-                                            hidden_size, target_size, vocab_size, pretrain, dropout)
-    elif modeltype == "experimental":
-        model, placeholders = get_model_experimental(batch_size, max_seq_length, input_size, hidden_size, target_size,
-                                                     vocab_size, pretrain, dropout)
+                                            hidden_size, target_size, vocab_size, pretrain, tanhOrSoftmax, dropout)
+    elif modeltype == "bicond":
+        model, placeholders = get_model_bidirectional_conditioning(batch_size, max_seq_length, input_size, hidden_size, target_size,
+                                                                   vocab_size, pretrain, tanhOrSoftmax, dropout)
     elif modeltype == "conditional-target-feed":
         model, placeholders = get_model_conditional_target_feed(batch_size, max_seq_length, input_size, hidden_size,
                                                                 target_size,
-                                                                vocab_size, pretrain, dropout)
-    elif modeltype == "experimental-sepembed":
-        model, placeholders = get_model_experimental_sepembed(batch_size, max_seq_length, input_size, hidden_size,
-                                                              target_size,
-                                                              vocab_size, pretrain, dropout)
+                                                                vocab_size, pretrain, tanhOrSoftmax, dropout)
+    elif modeltype == "bicond-sepembed":
+        model, placeholders = get_model_bicond_sepembed(batch_size, max_seq_length, input_size, hidden_size,
+                                                        target_size,
+                                                        vocab_size, pretrain, tanhOrSoftmax, dropout)
+        sep = True
 
     ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
 
-    #changing class weight, doesn't seem to help though
-    if ignorelossneut:
-        alpha = 0.1
-        #class_weight = tf.constant([0.2, 0.4, 0.4])
-        #weighted_logits = tf.mul(model, class_weight)  # shape [batch_size, 3]
-        loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)
-        loss = (1 - (targets[0] * (1 - alpha))) * loss
 
-    else:
-        loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)   # targets: labels (e.g. pos/neg/neutral)
+    loss = tf.nn.softmax_cross_entropy_with_logits(model, targets)   # targets: labels (e.g. pos/neg/neutral)
 
     optimizer = tf.train.AdamOptimizer(learning_rate)
 
@@ -614,24 +483,18 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
         hooks = [
             SpeedHook(summary_writer, iteration_interval=50, batch_size=batch_size),
-            SaveModelHookDev(path="../out/save/" + outfolder, at_every_epoch=2), #SaveModelHook(path="../out/save", at_epoch=10, at_every_epoch=2),
-            #LoadModelHook("./out/save/", 10),
-            SemEvalHook(corpus_test_batch, placeholders, 2),
+            SaveModelHookDev(path="../out/save/" + outfolder, at_every_epoch=2),
+            SemEvalHook(corpus_test_batch, placeholders, 1),
             LossHook(summary_writer, iteration_interval=50),
             AccuracyHook(summary_writer, acc_batcher, placeholders, 2),
             AccuracyHookIgnoreNeutral(summary_writer, acc_batcher, placeholders, 2)
         ]
 
-
-
-        if testOnly == False:
-            trainer = Trainer(optimizer, max_epochs, hooks)
-            epoch = trainer(batcher=batcher, acc_thresh=acc_thresh, pretrain=pretrain, embedd=X, placeholders=placeholders, loss=loss, model=model)
-        else:
-            epoch = max_epochs - 1
+        trainer = Trainer(optimizer, max_epochs, hooks)
+        epoch = trainer(batcher=batcher, acc_thresh=acc_thresh, pretrain=pretrain, embedd=X, placeholders=placeholders,
+                        loss=loss, model=model, sep=sep)
 
         print("Applying to test data, getting predictions for NONE/AGAINST/FAVOR")
-        #path = "../out/save/latest"
 
         predictions_detailed_all = []
         predictions_all = []
@@ -646,7 +509,13 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
             feed_dict = {}
             for i in range(0, len(placeholders)):
                 feed_dict[placeholders[i]] = values[i]
-            truth = np.argmax(values[-1], 1)  # values[2] is a 3-legth one-hot vector containing the labels. this is to transform those back into integers
+            truth = np.argmax(values[-1], 1)  # values[2] is a 3-length one-hot vector containing the labels. this is to transform those back into integers
+            if pretrain == "pre" and sep == True:  # this is a bit hacky. To do: improve
+                vars = tf.all_variables()
+                emb_var = vars[0]
+                emb_var2 = vars[1]
+                sess.run(emb_var.assign(X))
+                sess.run(emb_var2.assign(X))
             if pretrain == "pre":  # this is a bit hacky. To do: improve
                 vars = tf.all_variables()
                 emb_var = vars[0]
@@ -658,14 +527,13 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                                      feed_dict=feed_dict)
             predictions_all.extend(predicted)
             correct += sum(truth == predicted)
-            #print("pred: ", sess.run(tf.nn.softmax(model), feed_dict=feed_dict))
-            #print("ids: ", values[-2])
+
             print("Num testing samples " + str(total) +
                   "\tAcc " + str(float(correct)/total) +
                   "\tCorrect " + str(correct) + "\tTotal " + str(total))
 
 
-        # potentially do postprocessing
+        # postprocessing
         if targetInTweet != {}:
             predictions_new = []
             ids_new = []
@@ -676,7 +544,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                     it += 1
                     continue
                 inTwe = targetInTweet[id.tolist()[0]]
-                if inTwe == True: #and (pred_prob[2] > 0.4 or pred_prob[1] > 0.4): #NONE/AGAINST/FAVOUR
+                if inTwe == True: #NONE/AGAINST/FAVOUR
                     pred = 1
                     if pred_prob[2] > pred_prob[1]:
                         pred = 2
@@ -693,52 +561,43 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
 
 
-def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", postprocess=True, shortenTargets=False, useAutoTrump=True, useClinton=True, ignorelossneut=False, acc_thresh=0.9, pretrain="pre_cont", usePhrases=False, input_size = 100, testOnly=False):
+def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, acc_thresh=0.9, pretrain="pre_cont", usePhrases=False):
     """
     Reading input files, calling the trainer for training the model, evaluate with official script
     :param outfile: name for output file
     :param stopwords: how to filter stopwords, see preprocess.filterStopwords()
     :param postprocess: force against/favor for tweets which contain the target
     :param shortenTargets: shorten the target text, see preprocess.transform_targets()
-    :param useAutoTrump: use automatically annotated Trump tweets - not helping, would probably need more work, so not used for best results
+    :param useAutoTrump: use automatically annotated Trump tweets, experimental, not helping at the moment
     :param useClinton: add the Hillary Clinton dev data to train data
     :param testSetting: evaluate on Trump
     """
 
-    if word2vecmodel == "default":
-        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_sing_100features_5minwords_5context_big") #"_big  #"../out/skip_nostop_single_100features_5minwords_5context"
+    target = "clinton"
+
+    if word2vecmodel == "small":
+        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context")
     else:
-        w2vmodel = word2vec.Word2Vec.load("../out/" + word2vecmodel)
+        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context_big")
 
     if usePhrases == True:
-        phrasemodel = Phrases.load("../out/phrase_trigram.model") #_all.model
-        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_tri_100features_5minwords_5context_big")
+        phrasemodel = Phrases.load("../out/phrase_all.model")
+        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_multi_100features_5minwords_5context")
 
-    enc = "windows-1252"
     if testSetting == "true":
         trainingdata = "../data/semeval2016-task6-train+dev.txt"
         testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
-    elif testSetting == "taskA":
-        trainingdata = "../data/semeval2016-task6-train+dev.txt"
-        testdata = "../data/SemEval2016-Task6-subtaskA-testdata-gold.txt"
-    elif testSetting.startswith("taskA-"):
-        trainingdata = "../data/semeval2016-task6-train+dev_" + testSetting.replace("taskA-", "") + ".txt"
-        testdata = "../data/SemEval2016-Task6-subtaskA-testdata-gold_" + testSetting.replace("taskA-", "") + ".txt"
-    elif testSetting == "taskC":
-        trainingdata = "../data/trump_autolabelled.txt"
-        testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
-        enc = "utf-8"
+        target = "trump"
     else:
         trainingdata = "../data/semeval2016-task6-trainingdata_new.txt"
         testdata = "../data/semEval2016-task6-trialdata_new.txt"
     if useClinton == False:
         trainingdata = "../data/semeval2016-task6-trainingdata_new.txt"
 
-    tweets, targets, labels, ids = reader.readTweetsOfficial(trainingdata, encoding=enc)
+    tweets, targets, labels, ids = reader.readTweetsOfficial(trainingdata)
 
     if useAutoTrump == True:
-        # the other one is _small
-        tweets_devaut, targets_devaut, labels_devaut, ids_devaut = reader.readTweetsOfficial("../data/trump_autolabelled_morehashs.txt",
+        tweets_devaut, targets_devaut, labels_devaut, ids_devaut = reader.readTweetsOfficial("../data/semeval2016-task6-autotrump.txt",
                                                                                          encoding='utf-8')
 
         ids_new = []
@@ -752,16 +611,16 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, dropout, sto
 
 
     if usePhrases == False:
-        tweet_tokens = tokenise_tweets(tweets, stopwords)  # phrasemodel[tokenise_tweets(tweets)]
+        tweet_tokens = tokenise_tweets(tweets, stopwords)
         if shortenTargets == False:
-            target_tokens = tokenise_tweets(targets, stopwords)  #phrasemodel[tokenise_tweets(transform_targets(targets))]
+            target_tokens = tokenise_tweets(targets, stopwords)
         else:
             target_tokens = tokenise_tweets(transform_targets(targets), stopwords)
     else:
-        tweet_tokens = phrasemodel[tokenise_tweets(tweets, stopwords)]  # phrasemodel[tokenise_tweets(tweets)]
+        tweet_tokens = phrasemodel[tokenise_tweets(tweets, stopwords)]
         if shortenTargets == False:
             target_tokens = phrasemodel[tokenise_tweets(targets,
-                                            stopwords)]  # phrasemodel[tokenise_tweets(transform_targets(targets))]
+                                            stopwords)]
         else:
             target_tokens = phrasemodel[tokenise_tweets(transform_targets(targets), stopwords)]
 
@@ -773,17 +632,17 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, dropout, sto
     tweets_test, targets_test, labels_test, ids_test = reader.readTweetsOfficial(testdata)
 
     if usePhrases == False:
-        tweet_tokens_test = tokenise_tweets(tweets_test, stopwords)  # phrasemodel[tokenise_tweets(tweets_test)]
+        tweet_tokens_test = tokenise_tweets(tweets_test, stopwords)
         if shortenTargets == False:
-            target_tokens_test = tokenise_tweets(targets_test, stopwords)  #phrasemodel[tokenise_tweets(transform_targets(targets_test))]
+            target_tokens_test = tokenise_tweets(targets_test, stopwords)
         else:
-            target_tokens_test = tokenise_tweets(transform_targets(targets_test), stopwords)  # #phrasemodel[tokenise_tweets(transform_targets(targets_test))]
+            target_tokens_test = tokenise_tweets(transform_targets(targets_test), stopwords)
     else:
-        tweet_tokens_test = phrasemodel[tokenise_tweets(tweets_test, stopwords)]  # phrasemodel[tokenise_tweets(tweets_test)]
+        tweet_tokens_test = phrasemodel[tokenise_tweets(tweets_test, stopwords)]
         if shortenTargets == False:
-            target_tokens_test = phrasemodel[tokenise_tweets(targets_test, stopwords)]  #phrasemodel[tokenise_tweets(transform_targets(targets_test))]
+            target_tokens_test = phrasemodel[tokenise_tweets(targets_test, stopwords)]
         else:
-            target_tokens_test = phrasemodel[tokenise_tweets(transform_targets(targets_test), stopwords)]  # #phrasemodel[tokenise_tweets(transform_targets(targets_test))]
+            target_tokens_test = phrasemodel[tokenise_tweets(transform_targets(targets_test), stopwords)]
 
 
     transformed_tweets_test = [transform_tweet(w2vmodel, senttoks) for senttoks in tweet_tokens_test]
@@ -793,14 +652,13 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, dropout, sto
     targetInTweet = {}
     if postprocess == True:
         ids_test_list = [item for sublist in [l.tolist() for l in ids_test] for item in sublist]
-        #ids_test_list = [l.tolist() for l in ids_test]
         id_tweet_dict = dict(zip(ids_test_list, tweets_test))
-        targetInTweet = istargetInTweet(id_tweet_dict, targets_test)
+        targetInTweet = istargetInTweet(id_tweet_dict, target)
 
     predictions_all, predictions_detailed_all, ids_all = test_trainer(testSetting, w2vmodel, transformed_tweets, transformed_targets, transformed_labels, ids, transformed_tweets_test,
                                                                       transformed_targets_test, transformed_labels_test, ids_test, hidden_size, max_epochs,
-                                                                       dropout, modeltype, targetInTweet,
-                                                                      testid, ignorelossneut=ignorelossneut, acc_thresh=acc_thresh, pretrain=pretrain, input_size=input_size, testOnly=testOnly)
+                                                                      tanhOrSoftmax, dropout, modeltype, targetInTweet,
+                                                                      testid, acc_thresh=acc_thresh, pretrain=pretrain)
 
 
 
@@ -808,26 +666,11 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, dropout, sto
     writer.eval(testdata, outfile)
 
 
-
-
-
-
 def readResfilesAndEval(testSetting, outfile):
 
         if testSetting == "true":
-            #trainingdata = "../data/semeval2016-task6-train+dev.txt"
-            testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
-        elif testSetting == "taskA":
-            #trainingdata = "../data/semeval2016-task6-train+dev.txt"
-            testdata = "../data/SemEval2016-Task6-subtaskA-testdata-gold.txt"
-        elif testSetting.startswith("taskA-"):
-            #trainingdata = "../data/semeval2016-task6-train+dev_" + testSetting.replace("taskA-", "") + ".txt"
-            testdata = "../data/SemEval2016-Task6-subtaskA-testdata-gold_" + testSetting.replace("taskA-", "") + ".txt"
-        elif testSetting == "taskC":
-            #trainingdata = "../data/trump_autlabelled_small.txt"
             testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
         else:
-            #trainingdata = "../data/semeval2016-task6-trainingdata_new.txt"
             testdata = "../data/semEval2016-task6-trialdata_new.txt"
 
         writer.eval(testdata, outfile)
@@ -837,46 +680,48 @@ if __name__ == '__main__':
     np.random.seed(1337)
     tf.set_random_seed(1337)
 
-    SINGLE_RUN = False  # only one run
-    EVALONLY = False   # evaluate a file again using the eval script
-    TESTONLY = False   # load a pre-trained model. Assumes there exists a pre-trained model with the exact configurations listed below.
-                       # A model is saved every two epochs, so this is useful for recovering a model from a previous epoch.
-    testrange = (0, 9)  # how many runs, those are the test IDS
+    SINGLE_RUN = False
+    EVALONLY = False
 
     if SINGLE_RUN:
-        testrange = (0, 1)  # for single run, the run IDs are overwritten
+        hidden_size = 60
+        max_epochs = 21
+        modeltype = "conditional"
+        word2vecmodel = "small"
+        stopwords = "most"
+        tanhOrSoftmax = "tanh"
+        dropout = "true"
+        testsetting = "true"
+        testid = "test1"
+
+        outfile = "../out/results_quicktest_" + testsetting + "_" + modeltype + "_" + str(hidden_size) + "_" + dropout + "_" + tanhOrSoftmax + "_" + str(max_epochs) + "_" + testid + ".txt"
+
+        readInputAndEval(testsetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords, testid, modeltype, word2vecmodel)
 
     else:
 
-        # code for testing different combinations below, alternatives are commented out
-        input_size = 100
-        hidden_size = [100]#, 60, 200, 150]#, 100]#100] #60]#[50, 55, 60]
-        modeltype = ["experimental"]#experimental"]#, "conditional-target-feed"]#"conditional-reverse", "conditional", "aggregated", "tweetonly"]
-        word2vecmodel = ["skip_nostop_sing_100features_5minwords_5context_big"]#, "skip_nostop_sing_200features_5minwords_5context_big", "default"]
-        dropout = ["true"]#, "false"]#, "true"]
-        testsetting = ["true"]#, "true"]#, "false"]
-        pretrain = ["pre_cont"]#, "false", "pre"]
-        num_epochs = 20
+        # code for testing different combinations below
+        hidden_size = [60] #[50, 55, 60]
+        acc_tresh = 1.0
+        max_epochs = 3
+        w2v = "small"
+        modeltype = ["bicond-sepembed", "bicond", "concat"]
+        stopwords = ["most"]
+        dropout = ["true", "false"]
+        testsetting = ["false"]
+        pretrain = ["pre", "pre_cont"]
 
-        for i in range(testrange[0], testrange[1]):
+        for i in range(10):
             for modelt in modeltype:
-                for w2v in word2vecmodel:
-                    for drop in dropout:
-                        for tests in testsetting:
-                            for hid in hidden_size:
-                                for pre in pretrain:
-                                    input_size = 100
-                                    if "200features" in w2v:
-                                        input_size = 200
-                                    else:
-                                        if hid > 100:
-                                            continue
+                for drop in dropout:
+                    for tests in testsetting:
+                        for hid in hidden_size:
+                            for pre in pretrain:
+                                outfile = "../out/results9-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
+                                print(outfile)
 
-                                    outfile = "../out/results8-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
-                                    print(outfile)
-
-                                    if EVALONLY == False:
-                                        readInputAndEval(tests, outfile, hid, num_epochs+1, drop, "most", str(i), modelt, acc_thresh=1.0, word2vecmodel=w2v, pretrain=pre, input_size=input_size, usePhrases=False, testOnly=TESTONLY)
-                                        tf.ops.reset_default_graph()
-                                    else:
-                                        readResfilesAndEval(tests, outfile)
+                                if EVALONLY == False:
+                                    readInputAndEval(tests, outfile, hid, 3, "tanh", drop, "most", str(i), modelt, acc_thresh=1.0, word2vecmodel=w2v, pretrain=pre, usePhrases=True)
+                                    tf.ops.reset_default_graph()
+                                else:
+                                    readResfilesAndEval(tests, outfile)

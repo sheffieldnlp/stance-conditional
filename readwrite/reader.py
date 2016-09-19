@@ -1,5 +1,3 @@
-__author__ = 'Isabelle Augenstein'
-
 import io
 import json
 import numpy as np

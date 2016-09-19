@@ -1,5 +1,3 @@
-__author__ = 'Isabelle Augenstein'
-
 import io
 import subprocess
 import sys
