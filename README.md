@@ -27,10 +27,7 @@ Dependencies:
 - Python 3.5
 - Numpy
 - Gensim
-- Tensorflow 0.6 (https://www.tensorflow.org/versions/master/get_started/os_setup.html#pip-installation). To get version 0.6 on Mac OS use: 
-```
-pip install https://storage.googleapis.com/tensorflow/mac/tensorflow-0.6.0-py3-none-any.whl
-```
+- Tensorflow 0.6 (https://www.tensorflow.org/versions/master/get_started/os_setup.html#pip-installation). To get version 0.6 on Mac OS use: `pip install https://storage.googleapis.com/tensorflow/mac/tensorflow-0.6.0-py3-none-any.whl`
 - nltk
 
 Running instructions:
