@@ -1,7 +1,7 @@
 from nltk.corpus import stopwords
 import collections
 from readwrite import reader
-from twokenize_wrapper import tokenize
+from twokenize_wrapper import twokenize
 import numpy as np
 
 KEYWORDS = {'clinton': ['hillary', 'clinton'],
@@ -176,7 +176,7 @@ def transform_tweet_dict(dictionary, words, maxlen=20):
 
 
 def tokenise_tweets(tweets, stopwords="all"):
-    return [filterStopwords(tokenize(tweet.lower()), stopwords) for tweet in tweets]
+    return [filterStopwords(twokenize.tokenize(tweet.lower()), stopwords) for tweet in tweets]
 
 
 def transform_targets(targets):
@@ -223,8 +223,8 @@ if __name__ == '__main__':
     tweet_tokens = tokenise_tweets(tweets)
     target_tokens = tokenise_tweets(targets)
     count, dictionary, reverse_dictionary = build_dataset([token for senttoks in tweet_tokens+target_tokens for token in senttoks])  #flatten tweets for vocab construction
-    transformed_tweets = [transform_tweet(dictionary, senttoks) for senttoks in tweet_tokens]
-    transformed_targets = [transform_tweet(dictionary, senttoks) for senttoks in target_tokens]
+    transformed_tweets = [transform_tweet_dict(dictionary, senttoks) for senttoks in tweet_tokens]
+    transformed_targets = [transform_tweet_dict(dictionary, senttoks) for senttoks in target_tokens]
     transformed_labels = transform_labels(labels)
     print('Longest tweet', len(max(transformed_tweets,key=len)))
     print('Longest target', len(max(transformed_targets,key=len)))
