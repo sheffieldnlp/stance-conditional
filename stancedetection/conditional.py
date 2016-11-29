@@ -1,14 +1,16 @@
+#import sys
+#sys.path.append("/path/to/stance-conditional")
+
 import tensorflow as tf
 import numpy as np
 
 from stancedetection.rnn import Encoder, Projector, Hook, AccuracyHook, LossHook, SpeedHook, BatchBucketSampler, TraceHook, SaveModelHookDev
 from stancedetection.rnn import Trainer, SemEvalHook, AccuracyHookIgnoreNeutral, load_model_dev
 from readwrite import reader, writer
-from preprocess import tokenise_tweets, transform_targets, transform_tweet, transform_labels, istargetInTweet
+from preprocess import tokenise_tweets, transform_targets, transform_tweet, transform_labels, istargetInTweet, istargetInTweetSing
 from gensim.models import word2vec, Phrases
 import os
 from tensorflow.models.rnn import rnn_cell
-import numpy.ma as ma
 
 
 def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, target_size,
@@ -17,8 +19,6 @@ def get_model_conditional(batch_size, max_seq_length, input_size, hidden_size, t
     Unidirectional conditional encoding model
     :param pretrain:  "pre": use pretrained word embeddings, "pre-cont": use pre-trained embeddings and continue training them, otherwise: random initialisation
     """
-
-
 
     # batch_size x max_seq_length
     inputs = tf.placeholder(tf.int32, [batch_size, max_seq_length])
@@ -397,7 +397,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
     # parameters
     learning_rate = 0.0001
-    batch_size = 97
+    batch_size = 70
     input_size = 100
 
     outfolder = "_".join([testid, modeltype, testsetting, "hidden-" + str(hidden_size), tanhOrSoftmax])
@@ -409,8 +409,6 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
         data = [np.asarray(targets), np.asarray(tweets), np.asarray(ids), np.asarray(labels)]
     else:
         data = [np.asarray(tweets), np.asarray(targets), np.asarray(ids), np.asarray(labels)]
-
-    print("Number training examples:", len(tweets))
 
     X = w2vmodel.syn0
     vocab_size = len(w2vmodel.vocab)
@@ -439,7 +437,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                                                         vocab_size, pretrain, tanhOrSoftmax, dropout)
         sep = True
 
-    ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later
+    ids = tf.placeholder(tf.float32, [batch_size, 1], "ids")  #ids are so that the dev/test samples can be recovered later since we shuffle
     targets = tf.placeholder(tf.float32, [batch_size, target_size], "targets")
 
 
@@ -483,7 +481,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
         hooks = [
             SpeedHook(summary_writer, iteration_interval=50, batch_size=batch_size),
-            SaveModelHookDev(path="../out/save/" + outfolder, at_every_epoch=2),
+            SaveModelHookDev(path="../out/save/" + outfolder, at_every_epoch=1),
             SemEvalHook(corpus_test_batch, placeholders, 1),
             LossHook(summary_writer, iteration_interval=50),
             AccuracyHook(summary_writer, acc_batcher, placeholders, 2),
@@ -509,7 +507,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
             feed_dict = {}
             for i in range(0, len(placeholders)):
                 feed_dict[placeholders[i]] = values[i]
-            truth = np.argmax(values[-1], 1)  # values[2] is a 3-length one-hot vector containing the labels. this is to transform those back into integers
+            truth = np.argmax(values[-1], 1)  # values[2] is a 3-length one-hot vector containing the labels
             if pretrain == "pre" and sep == True:  # this is a bit hacky. To do: improve
                 vars = tf.all_variables()
                 emb_var = vars[0]
@@ -535,6 +533,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
         # postprocessing
         if targetInTweet != {}:
+
             predictions_new = []
             ids_new = []
             it = 0
@@ -544,7 +543,8 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
                     it += 1
                     continue
                 inTwe = targetInTweet[id.tolist()[0]]
-                if inTwe == True: #NONE/AGAINST/FAVOUR
+                if inTwe == True: #and (pred_prob[2] > 0.1 or pred_prob[1] > 0.1): #NONE/AGAINST/FAVOUR
+                    #print(str(id), "inTwe!")
                     pred = 1
                     if pred_prob[2] > pred_prob[1]:
                         pred = 2
@@ -561,7 +561,7 @@ def test_trainer(testsetting, w2vmodel, tweets, targets, labels, ids, tweets_tes
 
 
 
-def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="all", testid="test1", modeltype="conditional", word2vecmodel="small", postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, acc_thresh=0.9, pretrain="pre_cont", usePhrases=False):
+def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords="most", testid="test1", modeltype="bicond", word2vecmodel="small", postprocess=True, shortenTargets=False, useAutoTrump=False, useClinton=True, acc_thresh=1.0, pretrain="pre_cont", usePhrases=False):
     """
     Reading input files, calling the trainer for training the model, evaluate with official script
     :param outfile: name for output file
@@ -573,33 +573,36 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftma
     :param testSetting: evaluate on Trump
     """
 
-    target = "clinton"
+    fullp = "/Users/Isabelle/Documents/TextualEntailment/SemEvalStance/stance-conditional-acl2016-fresh/"
 
     if word2vecmodel == "small":
-        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context")
+        w2vmodel = word2vec.Word2Vec.load(fullp + "out/skip_nostop_single_100features_5minwords_5context")
     else:
-        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context_big")
+        w2vmodel = word2vec.Word2Vec.load(fullp + "out/skip_nostop_single_100features_5minwords_5context_big")
 
     if usePhrases == True:
-        phrasemodel = Phrases.load("../out/phrase_all.model")
-        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_multi_100features_5minwords_5context")
+        phrasemodel = Phrases.load(fullp + "out/phrase_all.model")
+        w2vmodel = word2vec.Word2Vec.load(fullp + "out/skip_nostop_multi_100features_5minwords_5context")
 
     if testSetting == "true":
-        trainingdata = "../data/semeval2016-task6-train+dev.txt"
-        testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
-        target = "trump"
+        trainingdata = fullp + "data/semeval2016-task6-train+dev.txt"
+        testdata = fullp + "data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
+    elif testSetting == "weaklySup":
+        trainingdata = fullp + "data/trump_autolabelled.txt"
+        testdata = fullp + "data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
+        enc = "utf-8"
     else:
-        trainingdata = "../data/semeval2016-task6-trainingdata_new.txt"
-        testdata = "../data/semEval2016-task6-trialdata_new.txt"
+        trainingdata = fullp + "data/semeval2016-task6-trainingdata_new.txt"
+        testdata = fullp + "data/semEval2016-task6-trialdata_new.txt"
     if useClinton == False:
-        trainingdata = "../data/semeval2016-task6-trainingdata_new.txt"
+        trainingdata = fullp + "data/semeval2016-task6-trainingdata_new.txt"
 
-    tweets, targets, labels, ids = reader.readTweetsOfficial(trainingdata)
+    tweets, targets, labels, ids = reader.readTweetsOfficial(trainingdata, encoding=enc)
 
+    # this is for using automatically labelled Donald Trump data in addition to task data
     if useAutoTrump == True:
-        tweets_devaut, targets_devaut, labels_devaut, ids_devaut = reader.readTweetsOfficial("../data/semeval2016-task6-autotrump.txt",
+        tweets_devaut, targets_devaut, labels_devaut, ids_devaut = reader.readTweetsOfficial(fullp + "data/trump_autolabelled.txt",
                                                                                          encoding='utf-8')
-
         ids_new = []
         for i in ids_devaut:
             ids_new.append(i + 10000)
@@ -653,7 +656,7 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftma
     if postprocess == True:
         ids_test_list = [item for sublist in [l.tolist() for l in ids_test] for item in sublist]
         id_tweet_dict = dict(zip(ids_test_list, tweets_test))
-        targetInTweet = istargetInTweet(id_tweet_dict, target)
+        targetInTweet = istargetInTweet(id_tweet_dict, targets_test) #istargetInTweet
 
     predictions_all, predictions_detailed_all, ids_all = test_trainer(testSetting, w2vmodel, transformed_tweets, transformed_targets, transformed_labels, ids, transformed_tweets_test,
                                                                       transformed_targets_test, transformed_labels_test, ids_test, hidden_size, max_epochs,
@@ -663,53 +666,56 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftma
 
 
     writer.printPredsToFileByID(testdata, outfile, ids_all, predictions_all)
-    writer.eval(testdata, outfile)
+    writer.eval(testdata, outfile, evalscript=fullp + "eval.pl")
 
 
 def readResfilesAndEval(testSetting, outfile):
 
         if testSetting == "true":
-            testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
+            testdata = fullp + "data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
         else:
-            testdata = "../data/semEval2016-task6-trialdata_new.txt"
+            testdata = fullp + "data/semEval2016-task6-trialdata_new.txt"
 
-        writer.eval(testdata, outfile)
+        writer.eval(testdata, outfile, evalscript=fullp + "eval.pl")
 
 
 if __name__ == '__main__':
     np.random.seed(1337)
     tf.set_random_seed(1337)
 
+    fullp = "." # set to path where you want to save the output
+
     SINGLE_RUN = False
     EVALONLY = False
 
     if SINGLE_RUN:
-        hidden_size = 60
-        max_epochs = 21
-        modeltype = "conditional"
-        word2vecmodel = "small"
+        hidden_size = 100
+        max_epochs = 8
+        modeltype = "bicond" # this is default
+        word2vecmodel = "big"
         stopwords = "most"
         tanhOrSoftmax = "tanh"
         dropout = "true"
-        testsetting = "true"
+        pretrain = "pre_cont" # this is default
+        testsetting = "weaklySup"
         testid = "test1"
 
-        outfile = "../out/results_quicktest_" + testsetting + "_" + modeltype + "_" + str(hidden_size) + "_" + dropout + "_" + tanhOrSoftmax + "_" + str(max_epochs) + "_" + testid + ".txt"
+        outfile = fullp + "out/results_quicktest_" + testsetting + "_" + modeltype + "_" + str(hidden_size) + "_" + dropout + "_" + tanhOrSoftmax + "_" + str(max_epochs) + "_" + testid + ".txt"
 
         readInputAndEval(testsetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords, testid, modeltype, word2vecmodel)
 
     else:
 
         # code for testing different combinations below
-        hidden_size = [60] #[50, 55, 60]
-        acc_tresh = 1.0
-        max_epochs = 3
-        w2v = "small"
-        modeltype = ["bicond-sepembed", "bicond", "concat"]
+        hidden_size = [100] #[50, 55, 60]
+        #acc_tresh = 1.0
+        max_epochs = 8
+        w2v = "big" #small
+        modeltype = ["bicond"]
         stopwords = ["most"]
-        dropout = ["true", "false"]
-        testsetting = ["false"]
-        pretrain = ["pre", "pre_cont"]
+        dropout = ["true"]
+        testsetting = ["weaklySup"]
+        pretrain = ["pre_cont"]
 
         for i in range(10):
             for modelt in modeltype:
@@ -717,11 +723,11 @@ if __name__ == '__main__':
                     for tests in testsetting:
                         for hid in hidden_size:
                             for pre in pretrain:
-                                outfile = "../out/results9-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
+                                outfile = fullp + "out/results_batch70_2_morehash3_ep7_9-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
                                 print(outfile)
 
                                 if EVALONLY == False:
-                                    readInputAndEval(tests, outfile, hid, 3, "tanh", drop, "most", str(i), modelt, acc_thresh=1.0, word2vecmodel=w2v, pretrain=pre, usePhrases=True)
+                                    readInputAndEval(tests, outfile, hid, max_epochs, "tanh", drop, "most", str(i), modelt, w2v, acc_thresh=1)
                                     tf.ops.reset_default_graph()
                                 else:
                                     readResfilesAndEval(tests, outfile)

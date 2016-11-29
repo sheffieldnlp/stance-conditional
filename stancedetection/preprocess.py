@@ -1,12 +1,12 @@
 from nltk.corpus import stopwords
 import collections
 from readwrite import reader
-from twokenize_wrapper import twokenize
+from twokenize_wrapper.twokenize import tokenize
 import numpy as np
 
 KEYWORDS = {'clinton': ['hillary', 'clinton'],
             'trump': ['donald trump', 'trump', 'donald'],
-            'climate': 'climate',
+            'climate': ['climate'],
             'feminism': ['feminism', 'feminist'],
             'abortion': ['abortion', 'aborting'],
             'atheism': ['atheism', 'atheist']
@@ -176,7 +176,7 @@ def transform_tweet_dict(dictionary, words, maxlen=20):
 
 
 def tokenise_tweets(tweets, stopwords="all"):
-    return [filterStopwords(twokenize.tokenize(tweet.lower()), stopwords) for tweet in tweets]
+    return [filterStopwords(tokenize(tweet.lower()), stopwords) for tweet in tweets]
 
 
 def transform_targets(targets):
