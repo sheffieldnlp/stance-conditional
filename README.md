@@ -48,3 +48,9 @@ python3 conditional.py
 ```
 
 Note that accuracy and loss are printed during training for the training set, whereas P/R/F1 are printed during training for the dev or test set.
+
+
+Bidirectional Conditional Encoding for Tensorflow version 0.11+:
+
+- A version of the bidirectional conditional reader for Tensorflow version 0.11+ implemented with dynamic RNNs is contained in ```stancedetection/bicond_tf11.py```
+- Note that this is only for illustration purposes / for those who want to apply the model to other tasks, and it is not connected to the rest of the code
