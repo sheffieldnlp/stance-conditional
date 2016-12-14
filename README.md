@@ -34,7 +34,10 @@ Running instructions:
 
 - Download all the above mentioned files and save them in the data/ subfolder
 - Add the twokenize submodule: 
-```git submodule add https://github.com/leondz/twokenize.git twokenize_wrapper```
+```
+git submodule add https://github.com/leondz/twokenize.git twokenize_wrapper
+touch twokenize_wrapper/__init__.py
+```
 - Make sure twokenize_wrapper, readwrite, and stancedetection are on PYTHONPATH
 - Run word2vec_training.py first to pre-train a word2vec model on the unlabelled data
 ```shell
