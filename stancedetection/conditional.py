@@ -573,35 +573,34 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftma
     :param testSetting: evaluate on Trump
     """
 
-    fullp = "/Users/Isabelle/Documents/TextualEntailment/SemEvalStance/stance-conditional-acl2016-fresh/"
 
     if word2vecmodel == "small":
-        w2vmodel = word2vec.Word2Vec.load(fullp + "out/skip_nostop_single_100features_5minwords_5context")
+        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context")
     else:
-        w2vmodel = word2vec.Word2Vec.load(fullp + "out/skip_nostop_single_100features_5minwords_5context_big")
+        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_single_100features_5minwords_5context_big")
 
     if usePhrases == True:
-        phrasemodel = Phrases.load(fullp + "out/phrase_all.model")
-        w2vmodel = word2vec.Word2Vec.load(fullp + "out/skip_nostop_multi_100features_5minwords_5context")
+        phrasemodel = Phrases.load("../out/phrase_all.model")
+        w2vmodel = word2vec.Word2Vec.load("../out/skip_nostop_multi_100features_5minwords_5context")
 
     if testSetting == "true":
-        trainingdata = fullp + "data/semeval2016-task6-train+dev.txt"
-        testdata = fullp + "data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
+        trainingdata = "../data/semeval2016-task6-train+dev.txt"
+        testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
     elif testSetting == "weaklySup":
-        trainingdata = fullp + "data/trump_autolabelled.txt"
-        testdata = fullp + "data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
+        trainingdata = "../data/trump_autolabelled.txt"
+        testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
         enc = "utf-8"
     else:
-        trainingdata = fullp + "data/semeval2016-task6-trainingdata_new.txt"
-        testdata = fullp + "data/semEval2016-task6-trialdata_new.txt"
+        trainingdata = "../data/semeval2016-task6-trainingdata_new.txt"
+        testdata = "../data/semEval2016-task6-trialdata_new.txt"
     if useClinton == False:
-        trainingdata = fullp + "data/semeval2016-task6-trainingdata_new.txt"
+        trainingdata = "../data/semeval2016-task6-trainingdata_new.txt"
 
     tweets, targets, labels, ids = reader.readTweetsOfficial(trainingdata, encoding=enc)
 
     # this is for using automatically labelled Donald Trump data in addition to task data
     if useAutoTrump == True:
-        tweets_devaut, targets_devaut, labels_devaut, ids_devaut = reader.readTweetsOfficial(fullp + "data/trump_autolabelled.txt",
+        tweets_devaut, targets_devaut, labels_devaut, ids_devaut = reader.readTweetsOfficial("../data/trump_autolabelled.txt",
                                                                                          encoding='utf-8')
         ids_new = []
         for i in ids_devaut:
@@ -672,9 +671,9 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftma
 def readResfilesAndEval(testSetting, outfile):
 
         if testSetting == "true":
-            testdata = fullp + "data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
+            testdata = "../data/SemEval2016-Task6-subtaskB-testdata-gold.txt"
         else:
-            testdata = fullp + "data/semEval2016-task6-trialdata_new.txt"
+            testdata = "../data/semEval2016-task6-trialdata_new.txt"
 
         writer.eval(testdata, outfile, evalscript=fullp + "eval.pl")
 
@@ -682,8 +681,6 @@ def readResfilesAndEval(testSetting, outfile):
 if __name__ == '__main__':
     np.random.seed(1337)
     tf.set_random_seed(1337)
-
-    fullp = "." # set to path where you want to save the output
 
     SINGLE_RUN = False
     EVALONLY = False
@@ -700,7 +697,7 @@ if __name__ == '__main__':
         testsetting = "weaklySup"
         testid = "test1"
 
-        outfile = fullp + "out/results_quicktest_" + testsetting + "_" + modeltype + "_" + str(hidden_size) + "_" + dropout + "_" + tanhOrSoftmax + "_" + str(max_epochs) + "_" + testid + ".txt"
+        outfile = "../out/results_quicktest_" + testsetting + "_" + modeltype + "_" + str(hidden_size) + "_" + dropout + "_" + tanhOrSoftmax + "_" + str(max_epochs) + "_" + testid + ".txt"
 
         readInputAndEval(testsetting, outfile, hidden_size, max_epochs, tanhOrSoftmax, dropout, stopwords, testid, modeltype, word2vecmodel)
 
@@ -723,7 +720,7 @@ if __name__ == '__main__':
                     for tests in testsetting:
                         for hid in hidden_size:
                             for pre in pretrain:
-                                outfile = fullp + "out/results_batch70_2_morehash3_ep7_9-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
+                                outfile = "../out/results_batch70_2_morehash3_ep7_9-1e-3-" + tests + "_" + modelt + "_w2v" + w2v + "_hidd" + str(hid) + "_drop" + drop + "_" + pre + "_" + str(i) + ".txt"
                                 print(outfile)
 
                                 if EVALONLY == False:
