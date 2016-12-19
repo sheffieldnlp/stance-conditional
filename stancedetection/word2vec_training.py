@@ -70,6 +70,6 @@ if __name__ == '__main__':
     tweets_unlabelled = reader.readTweets("../data/additionalTweetsStanceDetection.json")
     tweet_tokens_unlabelled = tokenise_tweets(tweets_unlabelled, stopwords="most")
 
-    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_single_100features_5minwords_5context")
+    trainWord2VecModel(unk_tokens+tweet_tokens+tweet_tokens_trump+tweet_tokens_unlabelled, "../out/skip_nostop_single_100features_5minwords_5context_big")
 
-    applyWord2VecMostSimilar("../out/skip_nostop_single_100features_5minwords_5context")
+    applyWord2VecMostSimilar("../out/skip_nostop_single_100features_5minwords_5context_big")
