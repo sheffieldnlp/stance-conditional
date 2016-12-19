@@ -1,0 +1,3 @@
+[submodule "twokenize_wrapper"]
+	path = twokenize_wrapper
+	url = https://github.com/leondz/twokenize.git
