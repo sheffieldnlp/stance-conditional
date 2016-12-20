@@ -665,7 +665,7 @@ def readInputAndEval(testSetting, outfile, hidden_size, max_epochs, tanhOrSoftma
 
 
     writer.printPredsToFileByID(testdata, outfile, ids_all, predictions_all)
-    writer.eval(testdata, outfile, evalscript=fullp + "eval.pl")
+    writer.eval(testdata, outfile, evalscript="eval.pl")
 
 
 def readResfilesAndEval(testSetting, outfile):
@@ -675,7 +675,7 @@ def readResfilesAndEval(testSetting, outfile):
         else:
             testdata = "../data/semEval2016-task6-trialdata_new.txt"
 
-        writer.eval(testdata, outfile, evalscript=fullp + "eval.pl")
+        writer.eval(testdata, outfile, evalscript="eval.pl")
 
 
 if __name__ == '__main__':
