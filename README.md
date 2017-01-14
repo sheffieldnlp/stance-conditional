@@ -34,6 +34,7 @@ Dependencies:
 Running instructions:
 
 - Download all the above mentioned files and save them in the data/ subfolder
+- Download the official SemEval evaluation materials from [here](http://alt.qcri.org/semeval2016/task6/data/uploads/eval_semeval16_task6_v2.zip) and put the file `eval.pl` in the `stancedetection` directory.
 - Add the twokenize submodule: 
 ```
 git submodule add https://github.com/leondz/twokenize.git twokenize_wrapper
